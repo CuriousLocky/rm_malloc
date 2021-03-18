@@ -1,0 +1,23 @@
+#include "datastructure.h"
+
+Node *findSucc(Node *node){
+    if(node->right==NULL){
+        return NULL;
+    }
+    Node *result = node->right;
+    while(result->left!=NULL){
+        result = result->left;
+    }
+    return result;
+}
+
+Node *deleteNode(Node *node, Node *root){
+    Node *succ = NULL;
+    if(node->left==NULL || node->right==NULL){
+        succ = node->left==NULL?node->right:node->left;
+        
+    }else{
+        succ = findSucc(node);
+    }
+
+}
