@@ -5,5 +5,6 @@
 
 void *rm_malloc(size_t size);
 void rm_free(void *ptr);
+void *rm_realloc(void *ptr, size_t new_size);
 
 #endif

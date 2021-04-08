@@ -5,9 +5,9 @@
 #include <string.h>
 
 #define PAYLOAD_SIZE_STEP 16
-#define FREE_MASK   0x7fffffffffffffff
-#define ALLOC_MASK  0x8000000000000000
-#define CONT_MASK   0x0000ffffffffffff
+#define FREE_MASK   0x7fffffffffffffffUL
+#define ALLOC_MASK  0x8000000000000000UL
+#define CONT_MASK   0x0000ffffffffffffUL
 
 inline uint64_t *GET_PAYLOAD_TAIL(uint64_t *payload_head, size_t size){
     return (uint64_t*)((char*)payload_head + size + 8);

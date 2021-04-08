@@ -1,13 +1,20 @@
 CXX = gcc
-CFLAGS = -lpthread -D DMEM_AVL -fPIC -O0 -I ./include/
+CFLAGS = -I ./include/ -lpthread -fPIC -O0 -D __NOISY_DEBUG
 
 SRC_ALL=$(wildcard src/*.c) test/test.c
 SRC=$(filter-out du , $(SRC_ALL))
-OBJ=$(SRC:src/%.c=obj/%.o) obj/test.o
+OBJ=$(SRC:src/%.c=obj/%.o)
 DEPS=$(wildcard include/*.h)
+SRC_BENCHMARK=$(wildcard benchmarktools/src/*.c)
 
-autotest_ori: src/autotest_ori.c
-	@$(CXX) $(CFLAGS) -o $@ $<
+libdrm_malloc.so: $(OBJ)
+	@$(CXX) $(CFLAGS) -DRUNTIME -ldl -shared $(OBJ) -o librm_malloc.so 
+
+obj/datastructure_tree.o: src/datastructure_tree.c $(DEPS)
+	@$(CXX) $(CFLAGS) -c -o $@ $<
+
+obj/rm_malloc_interface.o: src/rm_malloc_interface.c $(DEPS)
+	@$(CXX) $(CFLAGS) -c -o $@ $<
 
 obj/rm_malloc.o: src/rm_malloc.c $(DEPS)
 	@$(CXX) $(CFLAGS) -c -o $@ $<
@@ -24,14 +31,17 @@ obj/datastructure.o: src/datastructure.c $(DEPS)
 obj/datastructure_payload.o: src/datastructure_payload.c $(DEPS)
 	@$(CXX) $(CFLAGS) -c -o $@ $<
 
-obj/test.o: test/test.c $(DEPS)
-	@$(CXX) $(CFLAGS) -c -o $@ $<
+# obj/test.o: test/test.c $(DEPS)
+# 	@$(CXX) $(CFLAGS) -c -o $@ $<
 
-run2: $(OBJ)
-	@$(CXX) $(CFLAGS) -o $@ $<
+# run2: $(OBJ)
+# 	@$(CXX) $(CFLAGS) -o $@ $<
 
 run: $(SRC_ALL) $(DEPS)
 	@$(CXX) $(SRC_ALL) $(DEPS) $(CFLAGS) -o run
+
+benchmark: $(SRC_BENCHMARK)
+	cd benchmarktools; make all
 
 .PHONY: clean
 clean:

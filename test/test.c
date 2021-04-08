@@ -1,12 +1,10 @@
 #include <stdio.h>
-#include <inttypes.h>
 #include <stdlib.h>
-#include <time.h>
-#include <threads.h>
 
-#include "rm_malloc.h"
+size_t align(size_t size, size_t alignment){
+    return (((size)+(alignment-1)) & (~(alignment-1)));
+}
 
 int main(){
-    rm_free(rm_malloc(sizeof(24)));
-    return 0;
+    printf("%ld\n", align(16, 16));
 }

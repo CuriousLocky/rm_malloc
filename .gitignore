@@ -1,2 +1,5 @@
 .vscode
 obj/
+core
+*.txt
+*.so
