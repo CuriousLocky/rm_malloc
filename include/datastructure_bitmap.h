@@ -4,7 +4,8 @@
 #include <inttypes.h>
 #include <stdbool.h>
 #include <stddef.h>
-#include <pthread.h>
+
+#include "rm_threads.h"
 
 /*each bit of index is for indicating whether entries[i]==NULL*/
 typedef struct{
@@ -17,9 +18,7 @@ typedef struct ThreadInfo{
     int16_t thread_id;
     Table *level_0_table;
     struct ThreadInfo *next;
-    // mtx_t thread_lock;
-    // pthread_spinlock_t thread_lock;
-    pthread_mutex_t thread_lock;
+    rm_lock_t thread_lock;
     void *payload_pool;
     size_t payload_pool_size;
 } ThreadInfo;

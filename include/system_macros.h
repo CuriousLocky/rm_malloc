@@ -1,6 +1,5 @@
 #ifndef MACROS_H
 #define MACROS_H
-#define tls __thread
 // #define tls thread_local
 
 #include <stdio.h>

@@ -1,13 +1,13 @@
-#include <threads.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include "mempool.h"
 #include "datastructure.h"
 #include "datastructure_payload.h"
 #include "system_macros.h"
+#include "rm_threads.h"
 
-thread_local void *payload_pool = NULL;
-thread_local size_t payload_pool_size = 0;
+tls void *payload_pool = NULL;
+tls size_t payload_pool_size = 0;
 #define MIN_PAYLOAD_BLOCK_SIZE 32
 
 void payload_init(size_t payload_size){

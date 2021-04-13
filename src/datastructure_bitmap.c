@@ -2,7 +2,9 @@
 #include <string.h>
 #include <stdbool.h>
 #include <stdio.h>
+
 #include "system_macros.h"
+#include "rm_threads.h"
 
 #include "datastructure_bitmap.h"
 #include "mempool.h"
@@ -10,14 +12,11 @@
 #define TABLE_PER_META_CHUNK (META_CHUNK_SIZE/sizeof(Table))
 #define THREADINFO_PER_CHUNK (META_CHUNK_SIZE/sizeof(ThreadInfo))
 
-// static pthread_spinlock_t threadInfo_pool_lock;
-pthread_mutex_t threadInfo_pool_lock = PTHREAD_MUTEX_INITIALIZER;
+rm_lock_t threadInfo_pool_lock = RM_LOCK_INITIALIZER;
 static bool threadInfo_pool_lock_init_flag = 0;
-// static pthread_spinlock_t table_pool_lock;
-pthread_mutex_t table_pool_lock = PTHREAD_MUTEX_INITIALIZER;
+rm_lock_t table_pool_lock = RM_LOCK_INITIALIZER;
 static bool table_pool_lock_init_flag = 0;
-// static mtx_t threadInfo_pool_lock;
-// static mtx_t table_pool_lock;
+
 static Table *table_pool;
 static ThreadInfo *threadInfo_pool;
 static ThreadInfo *threadInfo_list_head = NULL;
@@ -29,9 +28,7 @@ static int table_meta_pool_usage = TABLE_PER_META_CHUNK;
 static int threadInfo_meta_pool_usage = THREADINFO_PER_CHUNK;
 
 static Table *global_level_0_table;
-// static mtx_t global_lock;
-// static pthread_spinlock_t global_lock;
-static pthread_mutex_t global_lock = PTHREAD_MUTEX_INITIALIZER;
+static rm_lock_t global_lock = RM_LOCK_INITIALIZER;
 static uint64_t *giant_root = NULL;
 
 tls ThreadInfo *local_thread_info = NULL;
@@ -58,9 +55,7 @@ Table *create_new_table(){
     #ifdef __NOISY_DEBUG
     write(1, "create_new_table\n", sizeof("create_new_table"));
     #endif
-    // mtx_lock(&table_pool_lock);
-    // pthread_spin_lock(&table_pool_lock);
-    pthread_mutex_lock(&table_pool_lock);
+    rm_lock(&table_pool_lock);
     if(table_meta_pool_usage == TABLE_PER_META_CHUNK){
         table_pool = meta_chunk_req();
         table_meta_pool_usage = 0;
@@ -72,12 +67,7 @@ Table *create_new_table(){
     result->index = 0;
     // memset(local_level_0_table->entries, 0, sizeof(local_level_0_table->entries));
     //meta info will always use fresh memory space, already zeroed
-
-    // printf("table_pool is %p\n", table_pool);
-    // printf("table_meta_usage is %d\n", table_meta_pool_usage);
-    // mtx_unlock(&table_pool_lock);
-    // pthread_spin_unlock(&table_pool_lock);
-    pthread_mutex_unlock(&table_pool_lock);
+    rm_unlock(&table_pool_lock);
     return result;
 }
 
@@ -111,8 +101,7 @@ ThreadInfo *create_new_threadInfo(){
     new_threadInfo->active = true;
     new_threadInfo->next = NULL;
     new_threadInfo->thread_id = threadInfo_list_size;
-    // mtx_init(&(new_threadInfo->thread_lock), mtx_plain);
-    pthread_mutex_init(&(new_threadInfo->thread_lock), PTHREAD_PROCESS_PRIVATE);
+    rm_lock_init(&(new_threadInfo->thread_lock));
     threadInfo_list_size++;
 
     if(threadInfo_list_head == NULL){
@@ -127,8 +116,8 @@ ThreadInfo *create_new_threadInfo(){
     return new_threadInfo;
 }
 
+pthread_key_t inactive_key;
 /*to set the threadinfo as inactive so it can be reused*/
-static pthread_key_t thread_set_inactive_key;
 void set_threadInfo_inactive(void *arg){
     #ifdef __NOISY_DEBUG
     write(1, "cleaning up\n", sizeof("cleaning up"));
@@ -138,45 +127,17 @@ void set_threadInfo_inactive(void *arg){
     local_thread_info->payload_pool_size = payload_pool_size;
 }
 
-/*To initialize the global freelist*/
-// pthread_once_t global_freelist_init_flag = PTHREAD_ONCE_INIT;
-// void global_freelist_init(){
-//     global_level_0_table = create_new_table();
-//     // printf("global_freelist_init finished\n");
-// }
-
-/*To initialize the meta pool lock*/
-// pthread_once_t meta_pool_lock_init_flag = PTHREAD_ONCE_INIT;
-// void meta_pool_lock_init(){
-//     // mtx_init(&threadInfo_pool_lock, mtx_plain);
-//     #ifdef __NOISY_DEBUG
-//     write(1, "meta_pool_lock_init\n", sizeof("meta_pool_lock_init"));
-//     #endif
-//     pthread_spin_init(&threadInfo_pool_lock, PTHREAD_PROCESS_PRIVATE);
-//     pthread_spin_init(&table_pool_lock, PTHREAD_PROCESS_PRIVATE);
-// }
-
 void thread_bitmap_init(){
     #ifdef __NOISY_DEBUG
     write(1, "thread_bitmap_init\n", sizeof("thread_bitmap_init"));
     #endif
-    // pthread_once(&meta_pool_lock_init_flag, &meta_pool_lock_init);
-    // if(threadInfo_pool_lock_init_flag==0){
-    //     threadInfo_pool_lock_init_flag = 1;
-    //     pthread_spin_init(&threadInfo_pool_lock, PTHREAD_PROCESS_PRIVATE);
-    //     pthread_spin_init(&table_pool_lock, PTHREAD_PROCESS_PRIVATE);
-    //     write(1, "du\n", sizeof("du"));
-    // }
-    pthread_key_create(&thread_set_inactive_key, set_threadInfo_inactive);
-    write(1, "du\n", sizeof("du"));
-    // pthread_setspecific(thread_set_inactive_key, (void*)0x8353);
-    // mtx_lock(&threadInfo_pool_lock);
-    // pthread_spin_lock(&threadInfo_pool_lock);
-    pthread_mutex_lock(&threadInfo_pool_lock);
+    // pthread_cleanup_push(set_threadInfo_inactive, NULL);    // not a safe implementation, but no idea how to improve
+    pthread_key_create(&inactive_key, set_threadInfo_inactive);
+    pthread_setspecific(inactive_key, (void*)0x8353);
+    rm_lock(&threadInfo_pool_lock);
     if(global_level_0_table==NULL){
         global_level_0_table = create_new_table();
     }
-    // pthread_once(&global_freelist_init_flag, &global_freelist_init);
     ThreadInfo *inactive_threadInfo = find_inactive_threadInfo();
     #ifdef __NOISY_DEBUG
     write(1, "find_inactive_threadInfo returned\n", sizeof("find_inactive_threadInfo returned"));
@@ -197,12 +158,12 @@ void thread_bitmap_init(){
         local_thread_info->level_0_table = local_level_0_table;
         thread_id = local_thread_info->thread_id;
     }
-    // mtx_unlock(&threadInfo_pool_lock);
-    // pthread_spin_unlock(&threadInfo_pool_lock);
-    pthread_mutex_unlock(&threadInfo_pool_lock);
+    rm_unlock(&threadInfo_pool_lock);
     // write(1, "exit thread_bitmap_init\n", sizeof("exit thread_bitmap_init"));
     // print_table(global_level_0_table);
     // print_table(local_level_0_table);
+    return;
+    // pthread_cleanup_pop(0);
 }
 
 uint64_t *find_bitmap_victim(size_t size){
@@ -225,9 +186,7 @@ uint64_t *find_bitmap_victim(size_t size){
     size_t result_size = 0;
     // check global table
     // printf("checking global table\n");
-    // if(mtx_trylock(&global_lock)==thrd_success){
-    // if(pthread_spin_trylock(&global_lock)==0){
-    if(pthread_mutex_trylock(&global_lock)==0){
+    if(rm_trylock(&global_lock)==RM_LOCKED){
         int level_0_slot = trailing0s((global_level_0_table->index)&level_0_index_mask);
         if(level_0_slot < 64){
             // printf("level_0_slot = %d\n", level_0_slot);
@@ -245,8 +204,7 @@ uint64_t *find_bitmap_victim(size_t size){
                 }
             }
         }
-        // mtx_unlock(&global_lock);
-        pthread_mutex_unlock(&global_lock);
+        rm_unlock(&global_lock);
     }
     #ifdef __NOISY_DEBUG
     write(1, "finished global table checking\n", sizeof("finished global table checking"));
@@ -254,7 +212,7 @@ uint64_t *find_bitmap_victim(size_t size){
     // check local table
     if(result == NULL){
         // mtx_lock(&(local_thread_info->thread_lock));
-        pthread_mutex_lock(&(local_thread_info->thread_lock));
+        rm_lock(&(local_thread_info->thread_lock));
         int level_0_slot = trailing0s((local_level_0_table->index)&level_0_index_mask);
         if(level_0_slot < 64){
             Table *level_1_table = local_level_0_table->entries[level_0_slot];
@@ -272,7 +230,7 @@ uint64_t *find_bitmap_victim(size_t size){
             }
         }
         // mtx_unlock(&(local_thread_info->thread_lock));
-        pthread_mutex_unlock(&(local_thread_info->thread_lock));
+        rm_unlock(&(local_thread_info->thread_lock));
     }
     #ifdef __NOISY_DEBUG
     write(1, "finished local table checking\n", sizeof("finished local table checking"));
@@ -288,9 +246,6 @@ uint64_t *find_bitmap_victim(size_t size){
     }
     // printf("returned result\n");
     // print_table(global_level_0_table);
-    // if(global_level_0_table->entries[0]!=NULL){
-    //     print_table(global_level_0_table->entries[0]);
-    // }
     return result;
 }
 
@@ -307,17 +262,14 @@ void add_bitmap_block(uint64_t *block, size_t size){
     // printf("level_0_offset = %d\n", level_0_offset);
     int level_1_offset = (size>>4)&63;
     // printf("level_1_offset = %d\n", level_1_offset);
-    // mtx_t *lock = &(local_thread_info->thread_lock);
-    // pthread_spinlock_t *lock = &(local_thread_info->thread_lock);
-    pthread_mutex_t *lock = &(local_thread_info->thread_lock);
+    rm_lock_t *lock = &(local_thread_info->thread_lock);
     Table *level_0_table = local_level_0_table;
-    // if(mtx_trylock(&global_lock)==thrd_success){
-    if(pthread_mutex_trylock(&global_lock)==0){
+    if(rm_trylock(&global_lock)==RM_LOCKED){
         lock = &global_lock;
         level_0_table = global_level_0_table;
     }else{
         // mtx_lock(lock);
-        pthread_mutex_lock(lock);
+        rm_lock(lock);
     }
     level_0_table->index |= (uint64_t)1<<level_0_offset;
     if(level_0_table->entries[level_0_offset]==NULL){
@@ -329,7 +281,7 @@ void add_bitmap_block(uint64_t *block, size_t size){
     SET_NEXT_BLOCK(block, level_1_table->entries[level_1_offset]);
     level_1_table->entries[level_1_offset] = block;
     // mtx_unlock(lock);
-    pthread_mutex_unlock(lock);
+    rm_unlock(lock);
     // print_table(global_level_0_table);
     // print_table(global_level_0_table->entries[0]);
 }

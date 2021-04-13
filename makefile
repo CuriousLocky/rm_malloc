@@ -1,5 +1,5 @@
 CXX = gcc
-CFLAGS = -I ./include/ -lpthread -fPIC -O0 -D __NOISY_DEBUG
+CFLAGS = -I ./include/ -lpthread -fPIC -O3 -D __NOISY_DEBUG
 
 SRC_ALL=$(wildcard src/*.c) test/test.c
 SRC=$(filter-out du , $(SRC_ALL))

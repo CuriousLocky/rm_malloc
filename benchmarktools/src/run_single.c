@@ -99,7 +99,7 @@ void test_single(char* file_name, int thread_id){
 		}
 		printf("thread %d, line %d completed\n", thread_id, line_number);
 	}
-	// printf("thread %d, test %s completed\n", thread_id, file_name);
+	printf("thread %d, test %s completed\n", thread_id, file_name);
 	fclose(trace);	
 }
 
@@ -139,7 +139,7 @@ void* run_thread(void* arg){
 			}			
 		}
 	}
-
+	// pthread_exit(NULL);
 	return NULL;
 }
 
