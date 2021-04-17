@@ -2,7 +2,7 @@
 #define DATASTRUCTURE_TREE_H
 
 #include <inttypes.h>
-#include <string.h>
+#include <stddef.h>
 
 /*find a victim block that can hold size bytes, return NULL if no block
 in the tree satisfies*/

@@ -1,28 +1,31 @@
 CXX = gcc
-CFLAGS = -pthread -fPIC
+CFLAGS = -pthread -fPIC -Og
 
-BIN= gen_big_trace linscal shbench threadTest run_single larson
+BIN= gen_big_trace,linscal,shbench,threadTest,run_single,larson
 
-gen_big_trace: src/gen_big_trace.c
+bin/gen_big_trace: src/gen_big_trace.c
 	@$(CXX) $(CFLAGS) -o $@ $<
 
-linscal: src/linscal.c
+bin/linscal: src/linscal.c
 	@$(CXX) $(CFLAGS) -o $@ $<
 
-shbench: src/shbench.c
+bin/shbench: src/shbench.c
 	@$(CXX) $(CFLAGS) -o $@ $<
 
-threadTest: src/threadTest.c
+bin/threadTest: src/threadTest.c
 	@$(CXX) $(CFLAGS) -o $@ $<
 
-run_single: src/run_single.c
+bin/run_single: src/run_single.c
 	@$(CXX) $(CFLAGS) -o $@ $<
 
-larson: src/larson.c
+bin/larson: src/larson.c
 	@$(CXX) $(CFLAGS) -o $@ $<
 
-all: $(BIN)
+dir:
+	mkdir bin
+
+all: dir bin/gen_big_trace bin/linscal bin/shbench bin/threadTest bin/run_single bin/larson
 
 .PHONY: clean
 clean:
-	rm -f $(BIN)
+	rm -f bin/{$(BIN)}

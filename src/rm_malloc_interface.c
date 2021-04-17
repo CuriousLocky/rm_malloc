@@ -20,10 +20,10 @@ void* calloc(size_t num, size_t size){
     void* result = rm_malloc(total_size);
     char *result_c = result;
     if(result!=NULL){
-        // for(size_t i = 0; i < total_size; i++){
-        //     result_c[i] = 0;
-        // }
-        memset(result, 0, total_size);
+        for(size_t i = 0; i < total_size; i++){
+            result_c[i] = 0;
+        }
+        // memset(result, 0, total_size);
     }
     return result;
 }

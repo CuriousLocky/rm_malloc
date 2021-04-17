@@ -1,5 +1,6 @@
 CXX = gcc
-CFLAGS = -I ./include/ -lpthread -fPIC -O3 -D __NOISY_DEBUG
+CFLAGS = -I ./include/ -lpthread -fPIC -O3
+#-D __NOISY_DEBUG
 
 SRC_ALL=$(wildcard src/*.c) test/test.c
 SRC=$(filter-out du , $(SRC_ALL))
@@ -7,8 +8,8 @@ OBJ=$(SRC:src/%.c=obj/%.o)
 DEPS=$(wildcard include/*.h)
 SRC_BENCHMARK=$(wildcard benchmarktools/src/*.c)
 
-libdrm_malloc.so: $(OBJ)
-	@$(CXX) $(CFLAGS) -DRUNTIME -ldl -shared $(OBJ) -o librm_malloc.so 
+libdrm_malloc.so: $(DEPS) $(SRC)
+	@$(CXX) $(CFLAGS) -DRUNTIME -ldl -shared $< -o librm_malloc.so 
 
 obj/datastructure_tree.o: src/datastructure_tree.c $(DEPS)
 	@$(CXX) $(CFLAGS) -c -o $@ $<
@@ -41,7 +42,7 @@ run: $(SRC_ALL) $(DEPS)
 	@$(CXX) $(SRC_ALL) $(DEPS) $(CFLAGS) -o run
 
 benchmark: $(SRC_BENCHMARK)
-	cd benchmarktools; make all
+	cd benchmarktools; make clean; make all
 
 .PHONY: clean
 clean:

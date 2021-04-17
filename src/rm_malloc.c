@@ -12,7 +12,7 @@ extern tls uint16_t thread_id;
 void *rm_malloc(size_t ori_size){
     if(ori_size==0){return NULL;}
     size_t size = align(ori_size, 16);
-    uint64_t *victim_block = find_victim(size);
+    uint64_t *victim_block = find_bitmap_victim(size);
     if(victim_block == NULL){
         victim_block = create_payload_block(size);
     }

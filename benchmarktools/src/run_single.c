@@ -9,7 +9,7 @@
 #include <time.h>
 #include <limits.h>
 
-#define MAXLINE 256
+#define MAXLINE 1024
 #define STEP 1
 
 #if defined(WIN32) || defined(_WIN32) 
@@ -195,9 +195,12 @@ void* run_main(void* arg){
 		malloc(sizeof(int));
 		return 0;
 	}
-	char* working_dir_temp = malloc(MAXLINE);
+	// printf("argv[0] is %s\n", argv[0]);
+	// char* working_dir_temp = malloc(MAXLINE);
+	// printf("%p\n", working_dir_temp);
 	// strcpy(working_dir_temp, argv[0]);
-	realpath(argv[0], working_dir_temp);
+	// realpath(argv[0], working_dir_temp);
+	char *working_dir_temp = realpath(argv[0], NULL);
 	gen_working_dir(working_dir_temp);
 	working_dir = working_dir_temp;
 	int start = 1;

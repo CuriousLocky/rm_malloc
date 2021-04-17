@@ -13,12 +13,12 @@
 #define THREADINFO_PER_CHUNK (META_CHUNK_SIZE/sizeof(ThreadInfo))
 
 rm_lock_t threadInfo_pool_lock = RM_LOCK_INITIALIZER;
-static bool threadInfo_pool_lock_init_flag = 0;
+// static bool threadInfo_pool_lock_init_flag = 0;
 rm_lock_t table_pool_lock = RM_LOCK_INITIALIZER;
-static bool table_pool_lock_init_flag = 0;
+// static bool table_pool_lock_init_flag = 0;
 
-static Table *table_pool;
-static ThreadInfo *threadInfo_pool;
+static Table *table_pool = NULL;
+static ThreadInfo *threadInfo_pool = NULL;
 static ThreadInfo *threadInfo_list_head = NULL;
 static ThreadInfo *threadInfo_list_tail = NULL;
 static uint16_t threadInfo_list_size = 0;
@@ -27,13 +27,13 @@ static uint16_t threadInfo_list_size = 0;
 static int table_meta_pool_usage = TABLE_PER_META_CHUNK;
 static int threadInfo_meta_pool_usage = THREADINFO_PER_CHUNK;
 
-static Table *global_level_0_table;
+static rm_once_t global_level_0_table_flag = RM_ONCE_INITIALIZER;
+static Table *global_level_0_table = NULL;
 static rm_lock_t global_lock = RM_LOCK_INITIALIZER;
 static uint64_t *giant_root = NULL;
 
 tls ThreadInfo *local_thread_info = NULL;
 tls Table *local_level_0_table = NULL;
-
 
 extern tls void *payload_pool;
 extern tls size_t payload_pool_size;
@@ -84,7 +84,7 @@ ThreadInfo *find_inactive_threadInfo(){
     return walker;
 }
 
-/*create a new threadInfo for this thread, with local_level_0_table uninitialized*/
+/*create a new threadInfo for this thread, with local_level_0_table initialized*/
 ThreadInfo *create_new_threadInfo(){
     #ifdef __NOISY_DEBUG
     write(1, "create_new_threadInfo\n", sizeof("create_new_threadInfo"));
@@ -101,6 +101,9 @@ ThreadInfo *create_new_threadInfo(){
     new_threadInfo->active = true;
     new_threadInfo->next = NULL;
     new_threadInfo->thread_id = threadInfo_list_size;
+    new_threadInfo->level_0_table = create_new_table();
+    new_threadInfo->payload_pool = NULL;
+    new_threadInfo->payload_pool_size = 0;
     rm_lock_init(&(new_threadInfo->thread_lock));
     threadInfo_list_size++;
 
@@ -127,38 +130,47 @@ void set_threadInfo_inactive(void *arg){
     local_thread_info->payload_pool_size = payload_pool_size;
 }
 
+void global_level_0_table_init(){
+    global_level_0_table = create_new_table();
+}
+
 void thread_bitmap_init(){
     #ifdef __NOISY_DEBUG
     write(1, "thread_bitmap_init\n", sizeof("thread_bitmap_init"));
     #endif
     // pthread_cleanup_push(set_threadInfo_inactive, NULL);    // not a safe implementation, but no idea how to improve
-    pthread_key_create(&inactive_key, set_threadInfo_inactive);
-    pthread_setspecific(inactive_key, (void*)0x8353);
     rm_lock(&threadInfo_pool_lock);
-    if(global_level_0_table==NULL){
-        global_level_0_table = create_new_table();
-    }
+    rm_callonce(&global_level_0_table_flag, global_level_0_table_init);
     ThreadInfo *inactive_threadInfo = find_inactive_threadInfo();
     #ifdef __NOISY_DEBUG
     write(1, "find_inactive_threadInfo returned\n", sizeof("find_inactive_threadInfo returned"));
     #endif
-    
-    if(inactive_threadInfo != NULL){
-        inactive_threadInfo->active = true;
-        local_thread_info = inactive_threadInfo;
-        local_level_0_table = inactive_threadInfo->level_0_table;
-        thread_id = inactive_threadInfo->thread_id;
-        payload_pool = inactive_threadInfo->payload_pool;
-        payload_pool_size = inactive_threadInfo->payload_pool_size;
+
+    if(inactive_threadInfo == NULL){
+        inactive_threadInfo = create_new_threadInfo();
     }else{
-        local_thread_info = create_new_threadInfo();
-        // printf("threadInfo created\n");
-        local_level_0_table = create_new_table();
-        // printf("level 0 table created\n");
-        local_thread_info->level_0_table = local_level_0_table;
-        thread_id = local_thread_info->thread_id;
+        inactive_threadInfo->active = true;
     }
+    local_thread_info = inactive_threadInfo;
+    local_level_0_table = inactive_threadInfo->level_0_table;
+    thread_id = inactive_threadInfo->thread_id;
+    payload_pool = inactive_threadInfo->payload_pool;
+    payload_pool_size = inactive_threadInfo->payload_pool_size;
+    
+    // if(inactive_threadInfo != NULL){
+    //     inactive_threadInfo->active = true;
+        
+    // }else{
+    //     local_thread_info = create_new_threadInfo();
+    //     // printf("threadInfo created\n");
+    //     local_level_0_table = create_new_table();
+    //     // printf("level 0 table created\n");
+    //     local_thread_info->level_0_table = local_level_0_table;
+    //     thread_id = local_thread_info->thread_id;
+    // }
     rm_unlock(&threadInfo_pool_lock);
+    pthread_key_create(&inactive_key, set_threadInfo_inactive);
+    pthread_setspecific(inactive_key, (void*)0x8353);
     // write(1, "exit thread_bitmap_init\n", sizeof("exit thread_bitmap_init"));
     // print_table(global_level_0_table);
     // print_table(local_level_0_table);
@@ -253,7 +265,12 @@ void add_bitmap_block(uint64_t *block, size_t size){
     #ifdef __NOISY_DEBUG
     write(1, "add_bitmap_block\n", sizeof("add_bitmap_block"));
     #endif
-    if(block==NULL){return;}
+    if(block==NULL){
+        #ifdef __NOISY_DEBUG
+        write(1, "add_bitmap_block received null, returnning\n", sizeof("add_bitmap_block received null, returnning"));
+        #endif
+        return;
+    }
     if(local_level_0_table==NULL){
         thread_bitmap_init();
     }

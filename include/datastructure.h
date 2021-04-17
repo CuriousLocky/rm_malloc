@@ -2,7 +2,7 @@
 #define DATASTRUCTURE_H
 
 #include <inttypes.h>
-#include <string.h>
+#include <stddef.h>
 
 void add_block(uint64_t *block, size_t size);
 

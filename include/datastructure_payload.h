@@ -2,7 +2,7 @@
 #define DATASTRUCTURE_PAYLOAD_H
 
 #include <inttypes.h>
-#include <string.h>
+#include <stddef.h>
 
 #define PAYLOAD_SIZE_STEP 16
 #define FREE_MASK   0x7fffffffffffffffUL
