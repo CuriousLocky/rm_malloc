@@ -1,19 +1,23 @@
 #include "rm_malloc.h"
 
+__attribute__((visibility("default")))
 void *malloc(size_t size){
     // write(1, "malloc\n", sizeof("malloc"));
     return rm_malloc(size);
 }
 
+__attribute__((visibility("default")))
 void free(void *ptr){
     // write(1, "free\n", sizeof("free"));
     rm_free(ptr);
 }
 
+__attribute__((visibility("default")))
 void *realloc(void *ptr, size_t size){
     return rm_realloc(ptr, size);
 }
 
+__attribute__((visibility("default")))
 void* calloc(size_t num, size_t size){
     // write(1, "calloc\n", sizeof("calloc"));
     size_t total_size = num*size;

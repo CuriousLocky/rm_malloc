@@ -1,6 +1,5 @@
 CXX = gcc
-CFLAGS = -I ./include/ -lpthread -fPIC -O3
-#-D __NOISY_DEBUG
+CFLAGS = -I ./include/ -lpthread -fPIC -fvisibility=hidden -Og -D __NOISY_DEBUG
 
 SRC_ALL=$(wildcard src/*.c) test/test.c
 SRC=$(filter-out du , $(SRC_ALL))
@@ -9,7 +8,7 @@ DEPS=$(wildcard include/*.h)
 SRC_BENCHMARK=$(wildcard benchmarktools/src/*.c)
 
 libdrm_malloc.so: $(DEPS) $(SRC)
-	@$(CXX) $(CFLAGS) -DRUNTIME -ldl -shared $< -o librm_malloc.so 
+	@$(CXX) $(CFLAGS) -DRUNTIME -ldl -shared $(DEPS) $(SRC) -o librm_malloc.so 
 
 obj/datastructure_tree.o: src/datastructure_tree.c $(DEPS)
 	@$(CXX) $(CFLAGS) -c -o $@ $<
