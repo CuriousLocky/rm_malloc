@@ -3,4 +3,4 @@ obj/
 core
 *.txt
 *.so
-benchmarktools/bin
+benchmarktools/bin/
