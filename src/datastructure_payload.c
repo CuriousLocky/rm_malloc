@@ -3,7 +3,6 @@
 #include "mempool.h"
 #include "datastructure.h"
 #include "datastructure_payload.h"
-#include "system_macros.h"
 #include "rm_threads.h"
 
 tls void *payload_pool = NULL;

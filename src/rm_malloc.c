@@ -5,7 +5,6 @@
 #include "datastructure_bitmap.h"
 #include "datastructure_payload.h"
 #include "mempool.h"
-#include "system_macros.h"
 
 extern tls uint16_t thread_id;
 

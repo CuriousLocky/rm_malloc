@@ -3,7 +3,6 @@
 #include <stdbool.h>
 #include <stdio.h>
 
-#include "system_macros.h"
 #include "rm_threads.h"
 
 #include "datastructure_bitmap.h"
