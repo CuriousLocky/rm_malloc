@@ -6,6 +6,7 @@
 #include "rm_threads.h"
 
 #include "datastructure_bitmap.h"
+#include "datastructure_payload.h"
 #include "mempool.h"
 
 #define TABLE_PER_META_CHUNK (META_CHUNK_SIZE/sizeof(Table))
@@ -177,7 +178,7 @@ void thread_bitmap_init(){
     // pthread_cleanup_pop(0);
 }
 
-uint64_t *find_bitmap_victim(size_t size){
+uint64_t *find_bitmap_victim(size_t ori_size){
     #ifdef __NOISY_DEBUG
     write(1, "find_bitmap_victim\n", sizeof("find_bitmap_victim"));
     #endif
@@ -187,7 +188,7 @@ uint64_t *find_bitmap_victim(size_t size){
         write(1, "thread_bitmap_init returned\n", sizeof("thread_bitmap_init returned"));
         #endif
     }
-    size -= 16;
+    size_t size = ori_size - 16;
     int level_0_offset = (size>>10)&63;
     int level_1_offset = (size>>4)&63;
     uint64_t level_0_index_mask = ~((((uint64_t)1)<<level_0_offset)-1);
@@ -205,7 +206,7 @@ uint64_t *find_bitmap_victim(size_t size){
             int level_1_slot = trailing0s((level_1_table->index)&level_1_index_mask);
             if(level_1_slot < 64){
                 result = level_1_table->entries[level_1_slot];
-                result_size = ((level_0_slot<<6)+level_1_slot)<<4;
+                result_size = (((uint64_t)level_0_slot<<6)+level_1_slot)<<4;
                 level_1_table->entries[level_1_slot] = GET_NEXT_BLOCK(result);
                 if(GET_NEXT_BLOCK(result)==NULL){
                     level_1_table->index &= ~((uint64_t)1<<level_1_slot);
@@ -230,7 +231,7 @@ uint64_t *find_bitmap_victim(size_t size){
             int level_1_slot = trailing0s((level_1_table->index)&level_1_index_mask);
             if(level_1_slot < 64){
                 result = level_1_table->entries[level_1_slot];
-                result_size = ((level_0_slot<<6)+level_1_slot)<<4;
+                result_size = (((uint64_t)level_0_slot<<6)+level_1_slot)<<4;
                 level_1_table->entries[level_1_slot] = GET_NEXT_BLOCK(result);
                 if(GET_NEXT_BLOCK(result)==NULL){
                     level_1_table->index &= ~((uint64_t)1<<level_1_slot);
@@ -249,8 +250,9 @@ uint64_t *find_bitmap_victim(size_t size){
     if(result != NULL){
         // printf("result_size = %ld\n", result_size);
         size_t size_diff = result_size - size;
+        // size_diff should be tested and replaced with a less aggressive(larger) number
         if(size_diff > 16){
-            uint64_t *new_block = (uint64_t*)((char*)result + size + 32);
+            uint64_t *new_block = GET_PAYLOAD_TAIL(result, ori_size) + 1;
             size_t new_block_size = size_diff - 16;
             add_bitmap_block(new_block, new_block_size);
         }

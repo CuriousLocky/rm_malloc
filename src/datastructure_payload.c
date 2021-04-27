@@ -17,7 +17,7 @@ void payload_init(size_t payload_size){
     uint64_t *new_payload_pool = (uint64_t*)payload_chunk_req(payload_size);
     PACK_PAYLOAD_TAIL(new_payload_pool, 1, 8);
     payload_pool = (char*)new_payload_pool + 24;
-    payload_pool_size = payload_size;
+    payload_pool_size = payload_size - 24;
 }
 
 void *create_payload_block(size_t size){
