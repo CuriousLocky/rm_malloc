@@ -198,26 +198,6 @@ uint64_t *find_bitmap_victim(size_t ori_size){
     size_t result_size = 0;
     // check global table
     // printf("checking global table\n");
-    if(rm_trylock(&global_lock)==RM_LOCKED){
-        int level_0_slot = trailing0s((global_level_0_table->index)&level_0_index_mask);
-        if(level_0_slot < 64){
-            // printf("level_0_slot = %d\n", level_0_slot);
-            Table *level_1_table = global_level_0_table->entries[level_0_slot];
-            int level_1_slot = trailing0s((level_1_table->index)&level_1_index_mask);
-            if(level_1_slot < 64){
-                result = level_1_table->entries[level_1_slot];
-                result_size = (((uint64_t)level_0_slot<<6)+level_1_slot)<<4;
-                level_1_table->entries[level_1_slot] = GET_NEXT_BLOCK(result);
-                if(GET_NEXT_BLOCK(result)==NULL){
-                    level_1_table->index &= ~((uint64_t)1<<level_1_slot);
-                    if(level_1_table->index == 0){
-                        global_level_0_table->index &= ~((uint64_t)1<<level_0_slot);
-                    }
-                }
-            }
-        }
-        rm_unlock(&global_lock);
-    }
     #ifdef __NOISY_DEBUG
     write(1, "finished global table checking\n", sizeof("finished global table checking"));
     #endif
@@ -282,13 +262,7 @@ void add_bitmap_block(uint64_t *block, size_t size){
     // printf("level_1_offset = %d\n", level_1_offset);
     rm_lock_t *lock = &(local_thread_info->thread_lock);
     Table *level_0_table = local_level_0_table;
-    if(rm_trylock(&global_lock)==RM_LOCKED){
-        lock = &global_lock;
-        level_0_table = global_level_0_table;
-    }else{
-        // mtx_lock(lock);
-        rm_lock(lock);
-    }
+    rm_lock(lock);
     level_0_table->index |= (uint64_t)1<<level_0_offset;
     if(level_0_table->entries[level_0_offset]==NULL){
         level_0_table->entries[level_0_offset] = create_new_table();
