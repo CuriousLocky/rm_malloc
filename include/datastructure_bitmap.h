@@ -17,8 +17,8 @@ typedef struct ThreadInfo{
     bool active;
     int16_t thread_id;
     Table *level_0_table;
+    Table *level_0_table_big;
     struct ThreadInfo *next;
-    rm_lock_t thread_lock;
     void *payload_pool;
     size_t payload_pool_size;
 } ThreadInfo;

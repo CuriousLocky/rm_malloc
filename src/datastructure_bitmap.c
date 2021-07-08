@@ -30,6 +30,7 @@ static uint64_t *giant_root = NULL;
 
 tls ThreadInfo *local_thread_info = NULL;
 tls Table *local_level_0_table = NULL;
+tls Table *local_level_0_table_big = NULL;
 
 extern tls void *payload_pool;
 extern tls size_t payload_pool_size;
@@ -90,7 +91,6 @@ ThreadInfo *create_new_threadInfo(){
     ThreadInfo *new_threadInfo = threadInfo_pool;
     threadInfo_pool ++;
 
-    new_threadInfo->active = true;
     new_threadInfo->next = NULL;
     new_threadInfo->thread_id = threadInfo_list_size;
     new_threadInfo->level_0_table = create_new_table();
@@ -107,7 +107,6 @@ void set_threadInfo_inactive(void *arg){
     #ifdef __NOISY_DEBUG
     write(1, "cleaning up\n", sizeof("cleaning up"));
     #endif
-    local_thread_info->active = false;
     local_thread_info->payload_pool = payload_pool;
     local_thread_info->payload_pool_size = payload_pool_size;
     rm_lock(&threadInfo_pool_lock);
@@ -129,8 +128,6 @@ void thread_bitmap_init(){
 
     if(inactive_threadInfo == NULL){
         inactive_threadInfo = create_new_threadInfo();
-    }else{
-        inactive_threadInfo->active = true;
     }
     local_thread_info = inactive_threadInfo;
     local_level_0_table = inactive_threadInfo->level_0_table;
