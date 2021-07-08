@@ -1,7 +1,7 @@
 #include <stdbool.h>
 #include <stdio.h>
 #include "mempool.h"
-#include "datastructure.h"
+#include "datastructure_bitmap.h"
 #include "datastructure_payload.h"
 #include "rm_threads.h"
 
@@ -26,7 +26,7 @@ void *create_payload_block(size_t size){
     #endif
     size_t payload_size = size+16;
     if(payload_pool_size<payload_size){
-        add_block((uint64_t*)payload_pool, payload_pool_size-16);
+        add_bitmap_block((uint64_t*)payload_pool, payload_pool_size-16);
         payload_init(payload_size);
     }
     if(payload_pool_size-payload_size<MIN_PAYLOAD_BLOCK_SIZE){
