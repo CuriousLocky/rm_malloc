@@ -237,15 +237,15 @@ void add_bitmap_block(uint64_t *block, size_t size){
     int level_1_offset = (size>>4)&63;
     // printf("level_1_offset = %d\n", level_1_offset);
     Table *level_0_table = local_level_0_table;
-    level_0_table->index |= (uint64_t)1<<level_0_offset;
     if(level_0_table->entries[level_0_offset]==NULL){
         level_0_table->entries[level_0_offset] = create_new_table();
     }
+    level_0_table->index |= (uint64_t)1<<level_0_offset;
     Table *level_1_table = level_0_table->entries[level_0_offset];
     // printf("level 1 table is %p\n", level_1_table);
-    level_1_table->index |= (uint64_t)1<<level_1_offset;
     SET_NEXT_BLOCK(block, level_1_table->entries[level_1_offset]);
     level_1_table->entries[level_1_offset] = block;
+    level_1_table->index |= (uint64_t)1<<level_1_offset;
     // mtx_unlock(lock);
     // print_table(global_level_0_table);
     // print_table(global_level_0_table->entries[0]);
