@@ -167,10 +167,10 @@ uint64_t *find_bitmap_victim(size_t ori_size){
         #endif
     }
     size_t size = ori_size - 16;
-    int level_0_offset = (size>>10)&63;
-    int level_1_offset = (size>>4)&63;
-    uint64_t level_0_index_mask = ~((((uint64_t)1)<<level_0_offset)-1);
-    uint64_t level_1_index_mask = ~((((uint64_t)1)<<level_1_offset)-1);
+    uint64_t level_0_offset = (size>>10)&63;
+    uint64_t level_1_offset = (size>>4)&63;
+    uint64_t level_0_index_mask = ~((1UL<<level_0_offset)-1);
+    uint64_t level_1_index_mask = ~((1UL<<level_1_offset)-1);
     // printf("level 1 index mask is %lx\n", level_1_index_mask);
     uint64_t *result = NULL;
     size_t result_size = 0;
@@ -182,18 +182,20 @@ uint64_t *find_bitmap_victim(size_t ori_size){
     // check local table
 
     // mtx_lock(&(local_thread_info->thread_lock));
+    uint64_t *table_slot_addr = NULL;
     int level_0_slot = trailing0s((local_level_0_table->index)&level_0_index_mask);
     if(level_0_slot < 64){
         Table *level_1_table = local_level_0_table->entries[level_0_slot];
         int level_1_slot = trailing0s((level_1_table->index)&level_1_index_mask);
         if(level_1_slot < 64){
             result = level_1_table->entries[level_1_slot];
+            table_slot_addr = (uint64_t*)&(level_1_table->entries[level_1_slot]);
             result_size = (((uint64_t)level_0_slot<<6)+level_1_slot)<<4;
             level_1_table->entries[level_1_slot] = GET_NEXT_BLOCK(result);
             if(GET_NEXT_BLOCK(result)==NULL){
-                level_1_table->index &= ~((uint64_t)1<<level_1_slot);
+                level_1_table->index &= ~(1UL<<level_1_slot);
                 if(level_1_table->index == 0){
-                    local_level_0_table->index &= ~((uint64_t)1<<level_0_slot);
+                    local_level_0_table->index &= ~(1UL<<level_0_slot);
                 }
             }
         }
@@ -208,10 +210,13 @@ uint64_t *find_bitmap_victim(size_t ori_size){
         size_t size_diff = result_size - size;
         // size_diff should be tested and replaced with a less aggressive(larger) number
         if(size_diff > 16){
+            result_size = size;
             uint64_t *new_block = GET_PAYLOAD_TAIL(result, ori_size) + 1;
             size_t new_block_size = size_diff - 16;
             add_bitmap_block(new_block, new_block_size);
         }
+        PACK_PAYLOAD_HEAD(result, 1, 0x1f, result_size + 16);
+        PACK_PAYLOAD_TAIL(result, 1, result_size+16);
     }
     // printf("returned result\n");
     // print_table(global_level_0_table);
@@ -232,20 +237,20 @@ void add_bitmap_block(uint64_t *block, size_t size){
         thread_bitmap_init();
     }
     size -= 16;
-    int level_0_offset = (size>>10)&63;
+    uint64_t level_0_offset = (size>>10)&63;
     // printf("level_0_offset = %d\n", level_0_offset);
-    int level_1_offset = (size>>4)&63;
+    uint64_t level_1_offset = (size>>4)&63;
     // printf("level_1_offset = %d\n", level_1_offset);
     Table *level_0_table = local_level_0_table;
     if(level_0_table->entries[level_0_offset]==NULL){
         level_0_table->entries[level_0_offset] = create_new_table();
     }
-    level_0_table->index |= (uint64_t)1<<level_0_offset;
+    level_0_table->index |= 1UL<<level_0_offset;
     Table *level_1_table = level_0_table->entries[level_0_offset];
     // printf("level 1 table is %p\n", level_1_table);
     SET_NEXT_BLOCK(block, level_1_table->entries[level_1_offset]);
     level_1_table->entries[level_1_offset] = block;
-    level_1_table->index |= (uint64_t)1<<level_1_offset;
+    level_1_table->index |= 1UL<<level_1_offset;
     // mtx_unlock(lock);
     // print_table(global_level_0_table);
     // print_table(global_level_0_table->entries[0]);

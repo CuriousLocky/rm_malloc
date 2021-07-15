@@ -14,8 +14,6 @@ void *rm_malloc(size_t ori_size){
     if(victim_block == NULL){
         victim_block = create_payload_block(size);
     }
-    PACK_PAYLOAD_HEAD(victim_block, 1, thread_id, size);
-    PACK_PAYLOAD_TAIL(victim_block, 1, size);
     return victim_block+1;
 }
 
