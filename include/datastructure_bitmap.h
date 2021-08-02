@@ -26,7 +26,7 @@ typedef struct ThreadInfo{
 inline uint64_t *GET_NEXT_BLOCK(uint64_t *block){
     return (uint64_t*)(*block);
 }
-inline void *SET_NEXT_BLOCK(uint64_t *block, uint64_t *next){
+inline void SET_NEXT_BLOCK(uint64_t *block, uint64_t *next){
     *block = (uint64_t)next;
 }
 
