@@ -1,4 +1,5 @@
 #include "rm_malloc.h"
+#include "pthread_wrapper.h"
 
 __attribute__((visibility("default")))
 void *malloc(size_t size){
@@ -30,4 +31,10 @@ void* calloc(size_t num, size_t size){
         // memset(result, 0, total_size);
     }
     return result;
+}
+
+__attribute__((visibility("default")))
+int pthread_create(pthread_t *thread, const pthread_attr_t *attr,
+                   void *(*start_routine)(void *), void *arg){
+    return rm_pthread_create(thread, attr, start_routine, arg);
 }

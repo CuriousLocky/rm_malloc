@@ -102,6 +102,14 @@ ThreadInfo *create_new_threadInfo(){
 }
 
 pthread_key_t inactive_key;
+
+/*
+#FIXME:
+The execution order of destructors registered by pthread_key_create() is random, and will be executed before a free() call
+releasing the memory requested during pthread_setspecific(). The former is a potention trouble maker but the later is surely
+causing crashing when there are rapid thread creating and destroying. 
+*/
+
 /*to set the threadinfo as inactive so it can be reused*/
 void set_threadInfo_inactive(void *arg){
     #ifdef __NOISY_DEBUG
@@ -115,7 +123,13 @@ void set_threadInfo_inactive(void *arg){
     rm_unlock(&threadInfo_pool_lock);
 }
 
-void thread_bitmap_init(){
+/*
+#XXX:
+The init function is registered as a constructor for the main thread. However, the order of constructors not providing
+a priority is random, thus it is possible that other constructors in the user application are executed brfore this.
+*/
+
+__attribute__ ((constructor)) void thread_bitmap_init(){
     #ifdef __NOISY_DEBUG
     write(1, "thread_bitmap_init\n", sizeof("thread_bitmap_init"));
     #endif
@@ -160,12 +174,12 @@ uint64_t *find_bitmap_victim(size_t ori_size){
     #ifdef __NOISY_DEBUG
     write(1, "find_bitmap_victim\n", sizeof("find_bitmap_victim"));
     #endif
-    if(local_level_0_table==NULL){
-        thread_bitmap_init();
-        #ifdef __NOISY_DEBUG
-        write(1, "thread_bitmap_init returned\n", sizeof("thread_bitmap_init returned"));
-        #endif
-    }
+    // if(local_level_0_table==NULL){
+    //     thread_bitmap_init();
+    //     #ifdef __NOISY_DEBUG
+    //     write(1, "thread_bitmap_init returned\n", sizeof("thread_bitmap_init returned"));
+    //     #endif
+    // }
     size_t size = ori_size - 16;
     uint64_t level_0_offset = (size>>10)&63;
     uint64_t level_1_offset = (size>>4)&63;
@@ -233,9 +247,9 @@ void add_bitmap_block(uint64_t *block, size_t size){
         #endif
         return;
     }
-    if(local_level_0_table==NULL){
-        thread_bitmap_init();
-    }
+    // if(local_level_0_table==NULL){
+    //     thread_bitmap_init();
+    // }
     size -= 16;
     uint64_t level_0_offset = (size>>10)&63;
     // printf("level_0_offset = %d\n", level_0_offset);
