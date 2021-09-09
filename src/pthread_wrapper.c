@@ -62,3 +62,8 @@ int rm_pthread_create(pthread_t *thread, const pthread_attr_t *attr,
     
     return thread_create(thread, attr, wrapped_task, task);
 }
+
+__attribute__((visibility("default")))
+int pthread_create(pthread_t *thread, const pthread_attr_t *attr,
+                   void *(*start_routine)(void *), void *arg)
+                   __attribute__((weak, alias("rm_pthread_create")));

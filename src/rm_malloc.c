@@ -6,7 +6,7 @@
 #include "mempool.h"
 
 extern tls uint16_t thread_id;
-
+__attribute__((visibility("default")))
 void *rm_malloc(size_t ori_size){
     if(ori_size==0){return NULL;}
     size_t size = align(ori_size, 16);
@@ -17,6 +17,9 @@ void *rm_malloc(size_t ori_size){
     return victim_block+1;
 }
 
+__attribute__((visibility("default")))
+void *malloc(size_t size) __attribute__((weak, alias("rm_malloc")));
+
 // uint64_t *coalesce(uint64_t *payload){
 //     uint64_t *forward_payload_tail = payload-1;
 //     uint64_t *next_payload_head = GET_PAYLOAD_TAIL(payload, GET_CONTENT(payload));
@@ -24,7 +27,7 @@ void *rm_malloc(size_t ori_size){
 
 //     }
 // }
-
+__attribute__((visibility("default")))
 void rm_free(void *ptr){
     if(ptr==NULL){return;}
     // printf("into rm_free\n");
@@ -44,12 +47,15 @@ void rm_free(void *ptr){
     add_bitmap_block(payload, size);
 }
 
+__attribute__((visibility("default")))
+void free(void *ptr) __attribute__((weak, alias("rm_free")));
+
 size_t rm_get_size(void *ptr){
     if(ptr==NULL){return 0;}
     uint64_t *block = (uint64_t*)ptr - 1;
     return GET_CONTENT(block);
 }
-
+__attribute__((visibility("default")))
 void *rm_realloc(void* ptr, size_t new_size){
     if(ptr==NULL){return rm_malloc(new_size);}
     if(new_size==0){
@@ -61,3 +67,6 @@ void *rm_realloc(void* ptr, size_t new_size){
     rm_free(ptr);
     return rm_malloc(new_size);
 }
+
+__attribute__((visibility("default")))
+void *realloc(void *ptr, size_t size) __attribute__((weak, alias("rm_realloc")));
