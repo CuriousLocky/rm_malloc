@@ -21,6 +21,9 @@ bin/run_single: src/run_single.c
 bin/larson: src/larson.c
 	@$(CXX) $(CFLAGS) -o $@ $<
 
+bin/larson_rm: src/larson_rm.c
+	@$(CXX) $(CFLAGS) -o $@ $< -ldl 
+
 dir:
 	mkdir bin
 
