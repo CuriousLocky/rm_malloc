@@ -122,6 +122,9 @@ void set_threadInfo_inactive(void *arg){
     local_thread_info->next = empty_threadInfo_list;
     empty_threadInfo_list = local_thread_info;
     rm_unlock(&threadInfo_pool_lock);
+    local_thread_info = NULL;
+    local_level_0_table = NULL;
+    local_level_0_table_big = NULL;
 }
 
 /*
@@ -206,9 +209,12 @@ uint64_t *find_bitmap_victim(size_t ori_size){
             result = level_1_table->entries[level_1_slot];
             table_slot_addr = (uint64_t*)&(level_1_table->entries[level_1_slot]);
             result_size = level_1_slot<<4;
-            level_1_table->entries[level_1_slot] = GET_NEXT_BLOCK(result);
-            if(GET_NEXT_BLOCK(result)==NULL){
+            uint64_t *new_list_head = GET_NEXT_BLOCK(result);
+            level_1_table->entries[level_1_slot] = new_list_head;
+            if(new_list_head==NULL){
                 level_1_table->index &= ~(1UL<<level_1_slot);
+            }else{
+                SET_PREV_BLOCK(new_list_head, NULL);
             }
             goto FIND_BITMAP_VICTIM_EXIT;
         }
@@ -223,12 +229,15 @@ uint64_t *find_bitmap_victim(size_t ori_size){
             result = level_1_table->entries[level_1_slot];
             table_slot_addr = (uint64_t*)&(level_1_table->entries[level_1_slot]);
             result_size = (((uint64_t)level_0_slot<<6)+level_1_slot)<<4;
-            level_1_table->entries[level_1_slot] = GET_NEXT_BLOCK(result);
-            if(GET_NEXT_BLOCK(result)==NULL){
+            uint64_t *new_list_head = GET_NEXT_BLOCK(result);
+            level_1_table->entries[level_1_slot] = new_list_head;
+            if(new_list_head==NULL){
                 level_1_table->index &= ~(1UL<<level_1_slot);
                 if(level_1_table->index == 0){
                     local_level_0_table_big->index &= ~(1UL<<level_0_slot);
                 }
+            }else{
+                SET_PREV_BLOCK(new_list_head, NULL);
             }
         }
     }
@@ -278,9 +287,14 @@ void add_bitmap_block(uint64_t *block, size_t size){
     // add to small list
     if(level_0_offset == 0){
         Table *level_1_table = local_level_0_table;
-        SET_NEXT_BLOCK(block, level_1_table->entries[level_1_offset]);
+        uint64_t *old_list_head = level_1_table->entries[level_1_offset];
+        SET_NEXT_BLOCK(block, old_list_head);
         level_1_table->entries[level_1_offset] = block;
-        level_1_table->index |= 1UL<<level_1_offset;
+        if(old_list_head == NULL){
+            level_1_table->index |= 1UL<<level_1_offset;
+        }else{
+            SET_PREV_BLOCK(old_list_head, block);
+        }
         return;
     }
 
@@ -288,13 +302,18 @@ void add_bitmap_block(uint64_t *block, size_t size){
     Table *level_0_table = local_level_0_table_big;
     if(level_0_table->entries[level_0_offset]==NULL){
         level_0_table->entries[level_0_offset] = create_new_table();
+        level_0_table->index |= 1UL<<level_0_offset;
     }
-    level_0_table->index |= 1UL<<level_0_offset;
     Table *level_1_table = level_0_table->entries[level_0_offset];
     // printf("level 1 table is %p\n", level_1_table);
+    uint64_t *old_list_head = level_1_table->entries[level_1_offset];
     SET_NEXT_BLOCK(block, level_1_table->entries[level_1_offset]);
     level_1_table->entries[level_1_offset] = block;
-    level_1_table->index |= 1UL<<level_1_offset;
+    if(old_list_head == NULL){
+        level_1_table->index |= 1UL<<level_1_offset;
+    }else{
+        SET_PREV_BLOCK(old_list_head, block);
+    }
     // mtx_unlock(lock);
     // print_table(global_level_0_table);
     // print_table(global_level_0_table->entries[0]);

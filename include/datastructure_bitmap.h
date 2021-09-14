@@ -14,7 +14,7 @@ typedef struct{
 } Table;
 
 typedef struct ThreadInfo{
-    bool active;
+    int active;
     int16_t thread_id;
     Table *level_0_table;
     Table *level_0_table_big;
@@ -28,6 +28,12 @@ inline uint64_t *GET_NEXT_BLOCK(uint64_t *block){
 }
 inline void SET_NEXT_BLOCK(uint64_t *block, uint64_t *next){
     *block = (uint64_t)next;
+}
+inline uint64_t *GET_PREV_BLOCK(uint64_t *block){
+    return (uint64_t*)(*(block+1));
+}
+inline void SET_PREV_BLOCK(uint64_t *block, uint64_t *prev){
+    *(block+1) = (uint64_t)prev;
 }
 
 /*returns the number of trailing zeros of an uint64_t*/
