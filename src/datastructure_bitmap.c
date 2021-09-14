@@ -94,6 +94,7 @@ ThreadInfo *create_new_threadInfo(){
     new_threadInfo->next = NULL;
     new_threadInfo->thread_id = threadInfo_list_size;
     new_threadInfo->level_0_table = create_new_table();
+    new_threadInfo->level_0_table_big = create_new_table();
     new_threadInfo->payload_pool = NULL;
     new_threadInfo->payload_pool_size = 0;
     threadInfo_list_size++;
@@ -145,6 +146,7 @@ __attribute__ ((constructor)) void thread_bitmap_init(){
     }
     local_thread_info = inactive_threadInfo;
     local_level_0_table = inactive_threadInfo->level_0_table;
+    local_level_0_table_big = inactive_threadInfo->level_0_table_big;
     thread_id = inactive_threadInfo->thread_id;
     payload_pool = inactive_threadInfo->payload_pool;
     payload_pool_size = inactive_threadInfo->payload_pool_size;
@@ -195,11 +197,27 @@ uint64_t *find_bitmap_victim(size_t ori_size){
     #endif
     // check local table
 
-    // mtx_lock(&(local_thread_info->thread_lock));
+    // check small table
+    if(level_0_offset == 0){
+        Table *level_1_table = local_level_0_table;
+        uint64_t *table_slot_addr = NULL;
+        int level_1_slot = trailing0s((level_1_table->index)&level_1_index_mask);
+        if(level_1_slot < 64){
+            result = level_1_table->entries[level_1_slot];
+            table_slot_addr = (uint64_t*)&(level_1_table->entries[level_1_slot]);
+            result_size = level_1_slot<<4;
+            level_1_table->entries[level_1_slot] = GET_NEXT_BLOCK(result);
+            if(GET_NEXT_BLOCK(result)==NULL){
+                level_1_table->index &= ~(1UL<<level_1_slot);
+            }
+            goto FIND_BITMAP_VICTIM_EXIT;
+        }
+    }
+    // check large table
     uint64_t *table_slot_addr = NULL;
-    int level_0_slot = trailing0s((local_level_0_table->index)&level_0_index_mask);
+    int level_0_slot = trailing0s((local_level_0_table_big->index)&level_0_index_mask);
     if(level_0_slot < 64){
-        Table *level_1_table = local_level_0_table->entries[level_0_slot];
+        Table *level_1_table = local_level_0_table_big->entries[level_0_slot];
         int level_1_slot = trailing0s((level_1_table->index)&level_1_index_mask);
         if(level_1_slot < 64){
             result = level_1_table->entries[level_1_slot];
@@ -209,7 +227,7 @@ uint64_t *find_bitmap_victim(size_t ori_size){
             if(GET_NEXT_BLOCK(result)==NULL){
                 level_1_table->index &= ~(1UL<<level_1_slot);
                 if(level_1_table->index == 0){
-                    local_level_0_table->index &= ~(1UL<<level_0_slot);
+                    local_level_0_table_big->index &= ~(1UL<<level_0_slot);
                 }
             }
         }
@@ -219,6 +237,7 @@ uint64_t *find_bitmap_victim(size_t ori_size){
     #ifdef __NOISY_DEBUG
     write(1, "finished local table checking\n", sizeof("finished local table checking"));
     #endif
+FIND_BITMAP_VICTIM_EXIT:
     if(result != NULL){
         // printf("result_size = %ld\n", result_size);
         size_t size_diff = result_size - size;
@@ -255,7 +274,18 @@ void add_bitmap_block(uint64_t *block, size_t size){
     // printf("level_0_offset = %d\n", level_0_offset);
     uint64_t level_1_offset = (size>>4)&63;
     // printf("level_1_offset = %d\n", level_1_offset);
-    Table *level_0_table = local_level_0_table;
+
+    // add to small list
+    if(level_0_offset == 0){
+        Table *level_1_table = local_level_0_table;
+        SET_NEXT_BLOCK(block, level_1_table->entries[level_1_offset]);
+        level_1_table->entries[level_1_offset] = block;
+        level_1_table->index |= 1UL<<level_1_offset;
+        return;
+    }
+
+    // add to large list
+    Table *level_0_table = local_level_0_table_big;
     if(level_0_table->entries[level_0_offset]==NULL){
         level_0_table->entries[level_0_offset] = create_new_table();
     }
