@@ -14,7 +14,9 @@ typedef struct{
 } Table;
 
 typedef struct ThreadInfo{
+    #ifdef __RACE_TEST
     int active;
+    #endif
     int16_t thread_id;
     Table *level_0_table;
     Table *level_0_table_big;

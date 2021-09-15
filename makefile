@@ -1,5 +1,5 @@
 CXX = gcc
-CFLAGS = -I ./include/ -fPIC -fvisibility=hidden -g -Og -std=gnu17
+CFLAGS = -I ./include/ -fPIC -fvisibility=hidden -g -Og -std=gnu17 -mcx16
 
 SRC_ALL=$(wildcard src/*.c) test/test.c
 SRC=$(filter-out du , $(SRC_ALL))
