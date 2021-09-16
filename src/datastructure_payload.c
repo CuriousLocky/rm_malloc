@@ -17,9 +17,6 @@ void payload_init(size_t payload_size){
     #endif
     size_t new_pool_size_with_ht = align(payload_size+16, PAYLOAD_CHUNK_SIZE);
     uint64_t *new_payload_pool = (uint64_t*)payload_chunk_req(payload_size);
-    // PACK_PAYLOAD_TAIL(new_payload_pool, 1, 8);
-    // payload_pool = (char*)new_payload_pool + 24;
-    // payload_pool_size = payload_size - 24;
     payload_pool = new_payload_pool + 1;
     payload_pool_size = new_pool_size_with_ht - 16;
 }

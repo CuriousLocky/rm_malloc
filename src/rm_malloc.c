@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include "rm_malloc.h"
 #include "datastructure_bitmap.h"
 #include "datastructure_payload.h"
@@ -70,3 +71,17 @@ void *rm_realloc(void* ptr, size_t new_size){
 
 __attribute__((visibility("default")))
 void *realloc(void *ptr, size_t size) __attribute__((weak, alias("rm_realloc")));
+
+void* rm_calloc(size_t num, size_t size){
+    // write(1, "calloc\n", sizeof("calloc"));
+    size_t total_size = num*size;
+    void* result = rm_malloc(total_size);
+    char *result_c = result;
+    if(result!=NULL){
+        memset(result, 0, total_size);
+    }
+    return result;
+}
+
+__attribute__((visibility("default")))
+void *calloc(size_t num, size_t size) __attribute__((weak, alias("rm_calloc")));

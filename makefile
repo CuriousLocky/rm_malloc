@@ -13,9 +13,6 @@ librm_malloc.so: $(DEPS) $(SRC)
 obj/datastructure_tree.o: src/datastructure_tree.c $(DEPS)
 	@$(CXX) $(CFLAGS) -c -o $@ $<
 
-obj/rm_malloc_interface.o: src/rm_malloc_interface.c $(DEPS)
-	@$(CXX) $(CFLAGS) -c -o $@ $<
-
 obj/rm_malloc.o: src/rm_malloc.c $(DEPS)
 	@$(CXX) $(CFLAGS) -c -o $@ $<
 

@@ -13,13 +13,10 @@
 #define THREADINFO_PER_CHUNK (META_CHUNK_SIZE/sizeof(ThreadInfo))
 
 rm_lock_t threadInfo_pool_lock = RM_LOCK_INITIALIZER;
-// static bool threadInfo_pool_lock_init_flag = 0;
 rm_lock_t table_pool_lock = RM_LOCK_INITIALIZER;
-// static bool table_pool_lock_init_flag = 0;
 
 static Table *table_pool = NULL;
 static ThreadInfo *threadInfo_pool = NULL;
-// static ThreadInfo *empty_threadInfo_list = NULL;
 static uint16_t threadInfo_list_size = 0;
 
 // A non-blocking stack is used for storing inactive threadinfo for reusage
@@ -80,12 +77,7 @@ Table *create_new_table(){
 
 /*go through the threadInfo_list to find an inactive one*/
 ThreadInfo *find_inactive_threadInfo(){
-    // ThreadInfo* inactive_threadInfo = empty_threadInfo_list;
-    // if(empty_threadInfo_list!=NULL){
-    //     empty_threadInfo_list = empty_threadInfo_list->next;
-    // }
-    // return inactive_threadInfo;
-    
+    // pop the current inactive threadinfo from the stack
     NonBlockingStackBlock old_block;
     NonBlockingStackBlock new_block;
     do{
@@ -106,7 +98,6 @@ ThreadInfo *create_new_threadInfo(){
     #endif
     rm_lock(&threadInfo_pool_lock);
     if(threadInfo_meta_pool_usage == THREADINFO_PER_CHUNK){
-        // printf("requesting meta_chunk\n");
         threadInfo_pool = meta_chunk_req();
         threadInfo_meta_pool_usage = 0;
     }
@@ -151,11 +142,7 @@ void set_threadInfo_inactive(void *arg){
     __sync_fetch_and_sub(&(local_thread_info->active), 1);
     #endif
 
-    // rm_lock(&threadInfo_pool_lock);
-    // local_thread_info->next = empty_threadInfo_list;
-    // empty_threadInfo_list = local_thread_info;
-    // rm_unlock(&threadInfo_pool_lock);
-
+    // push current threadinfo to the non-blocking stack
     NonBlockingStackBlock new_block;
     NonBlockingStackBlock old_block;
     new_block.block_struct.ptr = local_thread_info;
@@ -181,7 +168,6 @@ __attribute__ ((constructor)) void thread_bitmap_init(){
     #ifdef __NOISY_DEBUG
     write(1, "thread_bitmap_init\n", sizeof("thread_bitmap_init"));
     #endif
-    // pthread_cleanup_push(set_threadInfo_inactive, NULL);    // not a safe implementation, but no idea how to improve
     
     ThreadInfo *inactive_threadInfo = find_inactive_threadInfo();
     #ifdef __NOISY_DEBUG
@@ -203,48 +189,28 @@ __attribute__ ((constructor)) void thread_bitmap_init(){
         exit(-1);
     }
     #endif
-    
-    // if(inactive_threadInfo != NULL){
-    //     inactive_threadInfo->active = true;
-        
-    // }else{
-    //     local_thread_info = create_new_threadInfo();
-    //     // printf("threadInfo created\n");
-    //     local_level_0_table = create_new_table();
-    //     // printf("level 0 table created\n");
-    //     local_thread_info->level_0_table = local_level_0_table;
-    //     thread_id = local_thread_info->thread_id;
-    // }
 
     pthread_key_create(&inactive_key, set_threadInfo_inactive);
     pthread_setspecific(inactive_key, (void*)0x8353);
     // write(1, "exit thread_bitmap_init\n", sizeof("exit thread_bitmap_init"));
-    // print_table(global_level_0_table);
-    // print_table(local_level_0_table);
+
     return;
-    // pthread_cleanup_pop(0);
 }
 
 uint64_t *find_bitmap_victim(size_t ori_size){
     #ifdef __NOISY_DEBUG
     write(1, "find_bitmap_victim\n", sizeof("find_bitmap_victim"));
     #endif
-    // if(local_level_0_table==NULL){
-    //     thread_bitmap_init();
-    //     #ifdef __NOISY_DEBUG
-    //     write(1, "thread_bitmap_init returned\n", sizeof("thread_bitmap_init returned"));
-    //     #endif
-    // }
+
     size_t size = ori_size - 16;
     uint64_t level_0_offset = (size>>10)&63;
     uint64_t level_1_offset = (size>>4)&63;
     uint64_t level_0_index_mask = ~((1UL<<level_0_offset)-1);
     uint64_t level_1_index_mask = ~((1UL<<level_1_offset)-1);
-    // printf("level 1 index mask is %lx\n", level_1_index_mask);
+
     uint64_t *result = NULL;
     size_t result_size = 0;
-    // check global table
-    // printf("checking global table\n");
+
     #ifdef __NOISY_DEBUG
     write(1, "finished global table checking\n", sizeof("finished global table checking"));
     #endif
@@ -291,7 +257,6 @@ uint64_t *find_bitmap_victim(size_t ori_size){
             }
         }
     }
-    // mtx_unlock(&(local_thread_info->thread_lock));
 
     #ifdef __NOISY_DEBUG
     write(1, "finished local table checking\n", sizeof("finished local table checking"));
@@ -310,8 +275,6 @@ FIND_BITMAP_VICTIM_EXIT:
         PACK_PAYLOAD_HEAD(result, 1, 0x1f, result_size + 16);
         PACK_PAYLOAD_TAIL(result, 1, result_size+16);
     }
-    // printf("returned result\n");
-    // print_table(global_level_0_table);
     return result;
 }
 
@@ -325,14 +288,9 @@ void add_bitmap_block(uint64_t *block, size_t size){
         #endif
         return;
     }
-    // if(local_level_0_table==NULL){
-    //     thread_bitmap_init();
-    // }
     size -= 16;
     uint64_t level_0_offset = (size>>10)&63;
-    // printf("level_0_offset = %d\n", level_0_offset);
     uint64_t level_1_offset = (size>>4)&63;
-    // printf("level_1_offset = %d\n", level_1_offset);
 
     // add to small list
     if(level_0_offset == 0){
@@ -364,8 +322,5 @@ void add_bitmap_block(uint64_t *block, size_t size){
     }else{
         SET_PREV_BLOCK(old_list_head, block);
     }
-    // mtx_unlock(lock);
-    // print_table(global_level_0_table);
-    // print_table(global_level_0_table->entries[0]);
 }
 
