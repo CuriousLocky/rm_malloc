@@ -7,15 +7,31 @@
 #include "mempool.h"
 
 extern tls uint16_t thread_id;
-__attribute__((visibility("default")))
-void *rm_malloc(size_t ori_size){
-    if(ori_size==0){return NULL;}
+
+typedef struct{
+    int prezeroed_flag; // to indicate whether the block is pre-zeroed
+    uint64_t *ptr;  // the result of malloc
+}MallocResult;
+
+inline MallocResult __rm_malloc(size_t ori_size){
+    MallocResult result;
     size_t size = align(ori_size, 16);
     uint64_t *victim_block = find_bitmap_victim(size);
     if(victim_block == NULL){
-        victim_block = create_payload_block(size);
+        result.prezeroed_flag = 1;
+        result.ptr = create_payload_block(size);
+    }else{
+        result.prezeroed_flag = 0;
+        result.ptr = victim_block;
     }
-    return victim_block+1;
+    result.ptr ++;
+    return result;
+}
+
+__attribute__((visibility("default")))
+void *rm_malloc(size_t ori_size){
+    if(ori_size==0){return NULL;}
+    return __rm_malloc(ori_size).ptr;
 }
 
 __attribute__((visibility("default")))
@@ -75,12 +91,13 @@ void *realloc(void *ptr, size_t size) __attribute__((weak, alias("rm_realloc")))
 void* rm_calloc(size_t num, size_t size){
     // write(1, "calloc\n", sizeof("calloc"));
     size_t total_size = num*size;
-    void* result = rm_malloc(total_size);
-    char *result_c = result;
-    if(result!=NULL){
-        memset(result, 0, total_size);
+    if(total_size == 0) {return NULL;}
+    MallocResult resultPack = __rm_malloc(total_size);
+    uint64_t *resultPtr = resultPack.ptr;
+    if(!resultPack.prezeroed_flag){
+        memset(resultPtr, 0, total_size);
     }
-    return result;
+    return resultPtr;
 }
 
 __attribute__((visibility("default")))
