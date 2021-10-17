@@ -12,12 +12,13 @@
 #define TABLE_PER_META_CHUNK (META_CHUNK_SIZE/sizeof(Table))
 #define THREADINFO_PER_CHUNK (META_CHUNK_SIZE/sizeof(ThreadInfo))
 
-rm_lock_t threadInfo_pool_lock = RM_LOCK_INITIALIZER;
+// rm_lock_t threadInfo_pool_lock = RM_LOCK_INITIALIZER;
 rm_lock_t table_pool_lock = RM_LOCK_INITIALIZER;
 
 static Table *table_pool = NULL;
 static ThreadInfo *threadInfo_pool = NULL;
-static uint16_t threadInfo_list_size = 0;
+static volatile uint16_t threadInfo_pool_usage = 0;
+static volatile uint8_t threadInfo_pool_init_flag = 0;
 
 // A non-blocking stack is used for storing inactive threadinfo for reusage
 typedef union{
@@ -31,7 +32,7 @@ volatile NonBlockingStackBlock inactive_threadInfo_stack;
 
 //the default values are for initialization in the first call in init functions
 static int table_meta_pool_usage = TABLE_PER_META_CHUNK;
-static int threadInfo_meta_pool_usage = THREADINFO_PER_CHUNK;
+// static int threadInfo_meta_pool_usage = THREADINFO_PER_CHUNK;
 
 static uint64_t *giant_root = NULL;
 
@@ -61,7 +62,7 @@ Table *create_new_table(){
     #endif
     rm_lock(&table_pool_lock);
     if(table_meta_pool_usage == TABLE_PER_META_CHUNK){
-        table_pool = meta_chunk_req();
+        table_pool = meta_chunk_req(META_CHUNK_SIZE);
         table_meta_pool_usage = 0;
     }
     table_meta_pool_usage ++;
@@ -91,28 +92,42 @@ ThreadInfo *find_inactive_threadInfo(){
     return old_block.block_struct.ptr;
 }
 
+/*initialize the threadInfo_pool with sufficient space so that it will never need to expand*/
+void *threadInfo_pool_init(){
+    #define THREADINFO_POOL_SIZE    align(MAX_THREAD_NUM*sizeof(ThreadInfo), META_CHUNK_SIZE)
+    uint8_t init_id = __atomic_fetch_add(&threadInfo_pool_init_flag, 1, __ATOMIC_RELAXED);
+    // init_id is used to create a spinlock so that threadInfo_pool is init only once
+    if(init_id == 0){
+        threadInfo_pool = meta_chunk_req(THREADINFO_POOL_SIZE);
+    }else{
+        while(threadInfo_pool==NULL){
+            ;
+        }
+    }
+}
+
 /*create a new threadInfo for this thread, with local_level_0_table initialized*/
 ThreadInfo *create_new_threadInfo(){
     #ifdef __NOISY_DEBUG
     write(1, "create_new_threadInfo\n", sizeof("create_new_threadInfo"));
     #endif
-    rm_lock(&threadInfo_pool_lock);
-    if(threadInfo_meta_pool_usage == THREADINFO_PER_CHUNK){
-        threadInfo_pool = meta_chunk_req();
-        threadInfo_meta_pool_usage = 0;
-    }
-    threadInfo_meta_pool_usage ++;
-    ThreadInfo *new_threadInfo = threadInfo_pool;
-    threadInfo_pool ++;
-    rm_unlock(&threadInfo_pool_lock);
+    // rm_lock(&threadInfo_pool_lock);
+    // if(threadInfo_meta_pool_usage == THREADINFO_PER_CHUNK){
+    //     threadInfo_pool = meta_chunk_req(META_CHUNK_SIZE);
+    //     threadInfo_meta_pool_usage = 0;
+    // }
+    // threadInfo_meta_pool_usage ++;
+    uint16_t id = __atomic_fetch_add(&threadInfo_pool_usage, 1, __ATOMIC_RELAXED);
+    ThreadInfo *new_threadInfo = &threadInfo_pool[id];
+    // threadInfo_pool ++;
+    // rm_unlock(&threadInfo_pool_lock);
 
     new_threadInfo->next = NULL;
-    new_threadInfo->thread_id = threadInfo_list_size;
+    new_threadInfo->thread_id = id;
     new_threadInfo->level_0_table = create_new_table();
     new_threadInfo->level_0_table_big = create_new_table();
     new_threadInfo->payload_pool = NULL;
     new_threadInfo->payload_pool_size = 0;
-    threadInfo_list_size++;
 
     #ifdef __RACE_TEST
     new_threadInfo->active = 0;
@@ -168,6 +183,9 @@ __attribute__ ((constructor)) void thread_bitmap_init(){
     #ifdef __NOISY_DEBUG
     write(1, "thread_bitmap_init\n", sizeof("thread_bitmap_init"));
     #endif
+    if(threadInfo_pool == NULL){
+        threadInfo_pool_init();
+    }
     
     ThreadInfo *inactive_threadInfo = find_inactive_threadInfo();
     #ifdef __NOISY_DEBUG

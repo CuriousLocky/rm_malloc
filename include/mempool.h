@@ -23,9 +23,9 @@ void *payload_chunk_req(size_t size);
 void payload_chunk_rel(void *ptr, size_t size);
 
 /*Request a metadata chunk*/
-void *meta_chunk_req();
+void *meta_chunk_req(size_t size);
 
 /*Release a metadata chunk*/
-void *meta_chunk_rel(void *ptr);
+void *meta_chunk_rel(void *ptr, size_t size);
 
 #endif

@@ -5,9 +5,13 @@
 #include <stddef.h>
 
 #define PAYLOAD_SIZE_STEP 16
-#define FREE_MASK   0x7fffffffffffffffUL
-#define ALLOC_MASK  0x8000000000000000UL
-#define CONT_MASK   0x0000ffffffffffffUL
+#define FREE_MASK       0x7fffffffffffffffUL
+#define ALLOC_MASK      0x8000000000000000UL
+#define CONT_MASK       0x0000ffffffffffffUL
+
+#define ID_MASK         0x7fff000000000000UL
+#define MAX_THREAD_NUM  0x8000
+
 
 inline uint64_t *GET_PAYLOAD_TAIL(uint64_t *payload_head, size_t size){
     return (uint64_t*)((char*)payload_head + size + 8);
@@ -32,6 +36,9 @@ inline uint64_t GET_CONTENT(uint64_t *payload_head){
 }
 inline int IS_ALLOC(uint64_t *payload_head){
     return (*payload_head)>>63;
+}
+inline int GET_ID(uint64_t *payload_head){
+    return ((*payload_head)&ID_MASK)>>48;
 }
 
 void *create_payload_block(size_t size);
