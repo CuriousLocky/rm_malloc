@@ -7,19 +7,34 @@
 
 #include "rm_threads.h"
 
+// A non-blocking stack is used for storing inactive threadinfo for reusage
+typedef union{
+    __uint128_t block_16b;
+    struct{
+        void *ptr;
+        uint64_t id;
+    }block_struct;
+}NonBlockingStackBlock;
+
 /*each bit of index is for indicating whether entries[i]==NULL*/
 typedef struct{
     uint64_t index;
     void *entries[64];
-} Table;
+} LocalTable;
+
+/*works like LocalTable but shared, so entries organized by non-blocking stacks*/
+typedef struct{
+    uint64_t index;
+    NonBlockingStackBlock entryStacks[63];
+} SharedTable;
 
 typedef struct ThreadInfo{
     #ifdef __RACE_TEST
     int active;
     #endif
     int16_t thread_id;
-    Table *level_0_table;
-    Table *level_0_table_big;
+    LocalTable *level_0_table;
+    LocalTable *level_0_table_big;
     struct ThreadInfo *next;
     void *payload_pool;
     size_t payload_pool_size;

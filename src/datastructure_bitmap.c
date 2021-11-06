@@ -9,25 +9,17 @@
 #include "datastructure_payload.h"
 #include "mempool.h"
 
-#define TABLE_PER_META_CHUNK (META_CHUNK_SIZE/sizeof(Table))
+#define TABLE_PER_META_CHUNK (META_CHUNK_SIZE/sizeof(LocalTable))
 #define THREADINFO_PER_CHUNK (META_CHUNK_SIZE/sizeof(ThreadInfo))
 
 // rm_lock_t threadInfo_pool_lock = RM_LOCK_INITIALIZER;
 rm_lock_t table_pool_lock = RM_LOCK_INITIALIZER;
 
-static Table *table_pool = NULL;
+static LocalTable *table_pool = NULL;
 static ThreadInfo *threadInfo_pool = NULL;
 static volatile uint16_t threadInfo_pool_usage = 0;
 static volatile uint8_t threadInfo_pool_init_flag = 0;
 
-// A non-blocking stack is used for storing inactive threadinfo for reusage
-typedef union{
-    __uint128_t block_16b;
-    struct{
-        ThreadInfo *ptr;
-        uint64_t id;
-    }block_struct;
-}NonBlockingStackBlock;
 volatile NonBlockingStackBlock inactive_threadInfo_stack;
 
 //the default values are for initialization in the first call in init functions
@@ -37,15 +29,15 @@ static int table_meta_pool_usage = TABLE_PER_META_CHUNK;
 static uint64_t *giant_root = NULL;
 
 tls ThreadInfo *local_thread_info = NULL;
-tls Table *local_level_0_table = NULL;
-tls Table *local_level_0_table_big = NULL;
+tls LocalTable *local_level_0_table = NULL;
+tls LocalTable *local_level_0_table_big = NULL;
 
 extern tls void *payload_pool;
 extern tls size_t payload_pool_size;
 
 tls uint16_t thread_id;
 
-// void print_table(Table *table){
+// void print_table(LocalTable *table){
 //     printf("\nindex = %lx\n", table->index);
 //     for(int i = 0; i < 8; i++){
 //         for(int j = 0; j < 8; j++){
@@ -56,7 +48,7 @@ tls uint16_t thread_id;
 // }
 
 /*create a new table without any contents*/
-Table *create_new_table(){
+LocalTable *create_new_table(){
     #ifdef __NOISY_DEBUG
     write(1, "create_new_table\n", sizeof("create_new_table"));
     #endif
@@ -66,7 +58,7 @@ Table *create_new_table(){
         table_meta_pool_usage = 0;
     }
     table_meta_pool_usage ++;
-    Table *result = table_pool;
+    LocalTable *result = table_pool;
     table_pool ++;
 
     result->index = 0;
@@ -236,7 +228,7 @@ uint64_t *find_bitmap_victim(size_t ori_size){
 
     // check small table
     if(level_0_offset == 0){
-        Table *level_1_table = local_level_0_table;
+        LocalTable *level_1_table = local_level_0_table;
         uint64_t *table_slot_addr = NULL;
         int level_1_slot = trailing0s((level_1_table->index)&level_1_index_mask);
         if(level_1_slot < 64){
@@ -257,7 +249,7 @@ uint64_t *find_bitmap_victim(size_t ori_size){
     uint64_t *table_slot_addr = NULL;
     int level_0_slot = trailing0s((local_level_0_table_big->index)&level_0_index_mask);
     if(level_0_slot < 64){
-        Table *level_1_table = local_level_0_table_big->entries[level_0_slot];
+        LocalTable *level_1_table = local_level_0_table_big->entries[level_0_slot];
         int level_1_slot = trailing0s((level_1_table->index)&level_1_index_mask);
         if(level_1_slot < 64){
             result = level_1_table->entries[level_1_slot];
@@ -312,7 +304,7 @@ void add_bitmap_block(uint64_t *block, size_t size){
 
     // add to small list
     if(level_0_offset == 0){
-        Table *level_1_table = local_level_0_table;
+        LocalTable *level_1_table = local_level_0_table;
         uint64_t *old_list_head = level_1_table->entries[level_1_offset];
         SET_NEXT_BLOCK(block, old_list_head);
         level_1_table->entries[level_1_offset] = block;
@@ -325,12 +317,12 @@ void add_bitmap_block(uint64_t *block, size_t size){
     }
 
     // add to large list
-    Table *level_0_table = local_level_0_table_big;
+    LocalTable *level_0_table = local_level_0_table_big;
     if(level_0_table->entries[level_0_offset]==NULL){
         level_0_table->entries[level_0_offset] = create_new_table();
         level_0_table->index |= 1UL<<level_0_offset;
     }
-    Table *level_1_table = level_0_table->entries[level_0_offset];
+    LocalTable *level_1_table = level_0_table->entries[level_0_offset];
     // printf("level 1 table is %p\n", level_1_table);
     uint64_t *old_list_head = level_1_table->entries[level_1_offset];
     SET_NEXT_BLOCK(block, level_1_table->entries[level_1_offset]);
