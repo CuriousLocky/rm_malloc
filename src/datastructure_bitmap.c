@@ -30,7 +30,7 @@ static uint64_t *giant_root = NULL;
 
 tls ThreadInfo *local_thread_info = NULL;
 tls LocalTable *local_level_0_table = NULL;
-tls LocalTable *local_level_0_table_big = NULL;
+tls LocalTable *local_level_1_table = NULL;
 
 extern tls void *payload_pool;
 extern tls size_t payload_pool_size;
@@ -117,7 +117,7 @@ ThreadInfo *create_new_threadInfo(){
     new_threadInfo->next = NULL;
     new_threadInfo->thread_id = id;
     new_threadInfo->level_0_table = create_new_table();
-    new_threadInfo->level_0_table_big = create_new_table();
+    new_threadInfo->level_1_table = create_new_table();
     new_threadInfo->payload_pool = NULL;
     new_threadInfo->payload_pool_size = 0;
 
@@ -161,7 +161,7 @@ void set_threadInfo_inactive(void *arg){
 
     local_thread_info = NULL;
     local_level_0_table = NULL;
-    local_level_0_table_big = NULL;
+    local_level_1_table = NULL;
 
 }
 
@@ -189,7 +189,7 @@ __attribute__ ((constructor)) void thread_bitmap_init(){
     }
     local_thread_info = inactive_threadInfo;
     local_level_0_table = inactive_threadInfo->level_0_table;
-    local_level_0_table_big = inactive_threadInfo->level_0_table_big;
+    local_level_1_table = inactive_threadInfo->level_1_table;
     thread_id = inactive_threadInfo->thread_id;
     payload_pool = inactive_threadInfo->payload_pool;
     payload_pool_size = inactive_threadInfo->payload_pool_size;
@@ -247,9 +247,9 @@ uint64_t *find_bitmap_victim(size_t ori_size){
     }
     // check large table
     uint64_t *table_slot_addr = NULL;
-    int level_0_slot = trailing0s((local_level_0_table_big->index)&level_0_index_mask);
+    int level_0_slot = trailing0s((local_level_1_table->index)&level_0_index_mask);
     if(level_0_slot < 64){
-        LocalTable *level_1_table = local_level_0_table_big->entries[level_0_slot];
+        LocalTable *level_1_table = local_level_1_table->entries[level_0_slot];
         int level_1_slot = trailing0s((level_1_table->index)&level_1_index_mask);
         if(level_1_slot < 64){
             result = level_1_table->entries[level_1_slot];
@@ -260,7 +260,7 @@ uint64_t *find_bitmap_victim(size_t ori_size){
             if(new_list_head==NULL){
                 level_1_table->index &= ~(1UL<<level_1_slot);
                 if(level_1_table->index == 0){
-                    local_level_0_table_big->index &= ~(1UL<<level_0_slot);
+                    local_level_1_table->index &= ~(1UL<<level_0_slot);
                 }
             }else{
                 SET_PREV_BLOCK(new_list_head, NULL);
@@ -317,7 +317,7 @@ void add_bitmap_block(uint64_t *block, size_t size){
     }
 
     // add to large list
-    LocalTable *level_0_table = local_level_0_table_big;
+    LocalTable *level_0_table = local_level_1_table;
     if(level_0_table->entries[level_0_offset]==NULL){
         level_0_table->entries[level_0_offset] = create_new_table();
         level_0_table->index |= 1UL<<level_0_offset;
