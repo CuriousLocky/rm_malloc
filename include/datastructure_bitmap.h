@@ -7,6 +7,9 @@
 
 #include "rm_threads.h"
 
+#define LOCAL_TABLE_NUMBER      2
+#define SHARED_TABLE_NUMBER     4
+
 // A non-blocking stack is used for storing inactive threadinfo for reusage
 typedef union{
     __uint128_t block_16b;
@@ -33,24 +36,31 @@ typedef struct ThreadInfo{
     int active;
     #endif
     int16_t thread_id;
-    LocalTable *level_0_table;
-    LocalTable *level_1_table;
+    LocalTable tables[LOCAL_TABLE_NUMBER];
+    LocalTable level_0_table;
+    LocalTable level_1_table;
     struct ThreadInfo *next;
     void *payload_pool;
     size_t payload_pool_size;
 } ThreadInfo;
 
 inline uint64_t *GET_NEXT_BLOCK(uint64_t *block){
-    return (uint64_t*)(*block);
-}
-inline void SET_NEXT_BLOCK(uint64_t *block, uint64_t *next){
-    *block = (uint64_t)next;
-}
-inline uint64_t *GET_PREV_BLOCK(uint64_t *block){
     return (uint64_t*)(*(block+1));
 }
+inline void SET_NEXT_BLOCK(uint64_t *block, uint64_t *next){
+    *(block+1) = (uint64_t)next;
+}
+inline uint64_t *GET_PREV_BLOCK(uint64_t *block){
+    return (uint64_t*)(*(block+2));
+}
 inline void SET_PREV_BLOCK(uint64_t *block, uint64_t *prev){
-    *(block+1) = (uint64_t)prev;
+    *(block+2) = (uint64_t)prev;
+}
+inline uint64_t GET_LOCAL_TABLE_STEP(int table_level){
+    uint64_t step = table_level==0?
+        1UL << 4 :
+        1UL << 16;
+    return step;
 }
 
 /*returns the number of trailing zeros of an uint64_t*/
@@ -62,6 +72,21 @@ inline int trailing0s(uint64_t x){
         int result = 0;
         while(!(x&1)){
             x = x >> 1;
+            result ++;
+        }
+        return result;
+    #endif
+}
+
+/*returns the number of leading zeros of an uint64_t*/
+inline int leading0s(uint64_t x){
+    if(x==0){return 64;}
+    #ifdef __GNUC__
+        return __builtin_clzll(x);
+    #else
+        int result = 0;
+        while(!(x&(1<<63))){
+            x = x << 1;
             result ++;
         }
         return result;
