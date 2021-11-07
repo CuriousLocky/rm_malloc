@@ -1,6 +1,7 @@
 #include "pthread_wrapper.h"
 #include "rm_threads.h"
 #include "datastructure_bitmap.h"
+#include "rm_malloc.h"
 
 #define __USE_GNU
 #include <dlfcn.h>
@@ -12,6 +13,7 @@
 typedef int (*pthread_create_fpt)(pthread_t *, const pthread_attr_t *, void *(*)(void*), void *);
 
 static pthread_create_fpt thread_create = NULL;
+volatile uint8_t thread_create_init_flag = 0;
 rm_lock_t thread_create_fpt_lock = RM_LOCK_INITIALIZER;
 
 typedef struct Task{
@@ -42,21 +44,24 @@ void *wrapped_task(void *task){
     Task* task_content = task;
     void *(*routine)(void *) = task_content->routine;
     void *arg = task_content->arg;
-    free(task);
+    rm_free(task);
     routine(arg);
 }
 
 int rm_pthread_create(pthread_t *thread, const pthread_attr_t *attr,
                    void *(*start_routine)(void *), void *arg){
     if(thread_create == NULL){
-        rm_lock(&thread_create_fpt_lock);
-        if(thread_create == NULL){
+        uint8_t init_flag = __atomic_fetch_add(&thread_create_init_flag, 1, __ATOMIC_RELAXED);
+        if(init_flag == 0){
             find_thread_create();
+        }else{
+            do{
+                ;
+            }while(thread_create==NULL);
         }
-        rm_unlock(&thread_create_fpt_lock);
     }
 
-    Task *task = malloc(sizeof(Task));
+    Task *task = rm_malloc(sizeof(Task));
     task->routine = start_routine;
     task->arg = arg;
     
