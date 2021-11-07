@@ -27,10 +27,10 @@ void *create_payload_block(size_t size){
     #endif
     size_t payload_size = size+16;
     if(payload_pool_size<payload_size){
-        if(payload_pool_size >= 16){
-            PACK_PAYLOAD_HEAD(payload_pool, 0, thread_id, payload_pool_size);
-            PACK_PAYLOAD_TAIL(payload_pool, 0, payload_pool_size);
-            add_bitmap_block((uint64_t*)payload_pool, payload_pool_size); 
+        if(payload_pool_size >= MIN_PAYLOAD_BLOCK_SIZE){
+            PACK_PAYLOAD_HEAD(payload_pool, 0, thread_id, payload_pool_size-16);
+            PACK_PAYLOAD_TAIL(payload_pool, 0, payload_pool_size-16);
+            add_bitmap_block((uint64_t*)payload_pool, payload_pool_size-16); 
         }
         payload_init(payload_size);
     }

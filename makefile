@@ -1,7 +1,7 @@
 CXX = gcc
-CFLAGS = -I ./include/ -fPIC -fvisibility=hidden -g -Og -std=gnu17 -mcx16
+CFLAGS = -I ./include/ -fPIC -fvisibility=hidden -g -Og -std=gnu17 -mcx16 -ftls-model=initial-exec
 
-SRC_ALL=$(wildcard src/*.c) test/test.c
+SRC_ALL=$(wildcard src/*.c)
 SRC=$(filter-out du , $(SRC_ALL))
 OBJ=$(SRC:src/%.c=obj/%.o)
 DEPS=$(wildcard include/*.h)
