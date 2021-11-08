@@ -103,6 +103,10 @@ int main(int argc, char** argv){
                     my_malloc = dlsym(lib, "malloc");
                     my_free = dlsym(lib, "free");
                     my_pthread_create = dlsym(lib, "pthread_create");
+                    if(my_pthread_create == NULL){
+                        // allow unmodified pthread_create
+                        my_pthread_create = pthread_create;
+                    }
                 } break;
             default:
                 printf("unsupported flag\n");
