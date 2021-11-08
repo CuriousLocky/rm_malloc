@@ -240,38 +240,24 @@ uint64_t *find_bitmap_victim(size_t ori_size){
         uint64_t table_step = GET_LOCAL_TABLE_STEP(table_level);
         uint64_t result_size = GET_CONTENT(result);
         int64_t diff_block_size = result_size - req_size - 16;
-        // if(result_size == req_size){
-        //     remove_table_head(result, local_table[table_level], slot);
-        // }else if(diff_block_size > 0){
-        //     if(req_size + 16 < table_step){
-        //         uint64_t *donator = result;
-        //         uint64_t new_size = diff_block_size;
-        //         PACK_PAYLOAD_HEAD(donator, 0, 0x11, new_size);
-        //         PACK_PAYLOAD_TAIL(donator, 0, new_size);
-        //         result = GET_PAYLOAD_TAIL(donator, new_size) + 1;
-        //         result_size = req_size;
-        //     }else{
-        //         // table structure change, delete result block from table entry
-        //         remove_table_head(result, local_table[table_level], slot);
-        //         if(diff_block_size >= table_step){
-        //             // size difference not negligible, make a new block
-        //             result_size = req_size;
-        //             uint64_t *new_block = GET_PAYLOAD_TAIL(result, req_size) + 1;
-        //             PACK_PAYLOAD_HEAD(new_block, 0, 0x12, diff_block_size);
-        //             PACK_PAYLOAD_TAIL(new_block, 0, diff_block_size);
-        //             add_block_LocalTable(new_block, diff_block_size, table_level);
-        //             // add_bitmap_block(new_block, diff_block_size);
-        //         }
-        //     }
-        // }
-
-        remove_table_head(result, &(local_table[table_level]), slot);
-        if(diff_block_size > (int64_t)table_step){
+        uint64_t bit_size_diff = result_size ^ diff_block_size;
+        if(diff_block_size > 0 && leading0s(bit_size_diff) > leading0s(table_step)){
+            // table structure not changed
+            uint64_t *donator = result;
+            uint64_t new_size = diff_block_size;
+            PACK_PAYLOAD_HEAD(donator, 0, 0x11, new_size);
+            PACK_PAYLOAD_TAIL(donator, 0, new_size);
+            result = GET_PAYLOAD_TAIL(donator, new_size) + 1;
             result_size = req_size;
-            uint64_t *new_block = GET_PAYLOAD_TAIL(result, req_size) + 1;
-            PACK_PAYLOAD_HEAD(new_block, 0, thread_id, diff_block_size);
-            PACK_PAYLOAD_TAIL(new_block, 0, diff_block_size);
-            add_block_LocalTable(new_block, diff_block_size, table_level);
+        }else{
+            remove_table_head(result, &(local_table[table_level]), slot);
+            if(diff_block_size > (int64_t)table_step){
+                result_size = req_size;
+                uint64_t *new_block = GET_PAYLOAD_TAIL(result, req_size) + 1;
+                PACK_PAYLOAD_HEAD(new_block, 0, thread_id, diff_block_size);
+                PACK_PAYLOAD_TAIL(new_block, 0, diff_block_size);
+                add_block_LocalTable(new_block, diff_block_size, table_level);
+            }            
         }
         PACK_PAYLOAD_HEAD(result, 1, thread_id, result_size);
         PACK_PAYLOAD_TAIL(result, 1, result_size);
