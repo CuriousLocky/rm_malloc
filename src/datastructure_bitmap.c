@@ -245,7 +245,7 @@ uint64_t *find_bitmap_victim(size_t ori_size){
             // table structure not changed
             uint64_t *donator = result;
             uint64_t new_size = diff_block_size;
-            PACK_PAYLOAD_HEAD(donator, 0, 0x11, new_size);
+            PACK_PAYLOAD_HEAD(donator, 0, thread_id, new_size);
             PACK_PAYLOAD_TAIL(donator, 0, new_size);
             result = GET_PAYLOAD_TAIL(donator, new_size) + 1;
             result_size = req_size;
