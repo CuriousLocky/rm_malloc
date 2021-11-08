@@ -29,7 +29,8 @@ static int table_meta_pool_usage = TABLE_PER_META_CHUNK;
 static uint64_t *giant_root = NULL;
 
 thread_local ThreadInfo *local_thread_info = NULL;
-thread_local LocalTable *local_table[LOCAL_TABLE_NUMBER];
+// thread_local LocalTable *local_table[LOCAL_TABLE_NUMBER];
+thread_local LocalTable *local_table;
 
 extern thread_local void *payload_pool;
 extern thread_local size_t payload_pool_size;
@@ -177,9 +178,10 @@ __attribute__ ((constructor)) void thread_bitmap_init(){
         inactive_threadInfo = create_new_threadInfo();
     }
     local_thread_info = inactive_threadInfo;
-    for(int i = 0; i < LOCAL_TABLE_NUMBER; i++){
-        local_table[i] = &(inactive_threadInfo->tables[i]);
-    }
+    // for(int i = 0; i < LOCAL_TABLE_NUMBER; i++){
+    //     local_table[i] = &(inactive_threadInfo->tables[i]);
+    // }
+    local_table = inactive_threadInfo->tables;
     thread_id = inactive_threadInfo->thread_id;
     payload_pool = inactive_threadInfo->payload_pool;
     payload_pool_size = inactive_threadInfo->payload_pool_size;
@@ -222,9 +224,9 @@ uint64_t *find_bitmap_victim(size_t ori_size){
         if(offset <= 63){
             result = NULL;
             uint64_t index_mask = ~((1UL<<offset)-1);
-            slot = trailing0s((local_table[table_level]->index)&index_mask);
+            slot = trailing0s((local_table[table_level].index)&index_mask);
             if(slot < 64){
-                result = local_table[table_level]->entries[slot-1];
+                result = local_table[table_level].entries[slot-1];
                 break;
             }
         }
@@ -263,7 +265,7 @@ uint64_t *find_bitmap_victim(size_t ori_size){
         //     }
         // }
 
-        remove_table_head(result, local_table[table_level], slot);
+        remove_table_head(result, &(local_table[table_level]), slot);
         if(diff_block_size > (int64_t)table_step){
             result_size = req_size;
             uint64_t *new_block = GET_PAYLOAD_TAIL(result, req_size) + 1;
@@ -284,12 +286,11 @@ static inline void add_block_LocalTable(uint64_t *block, size_t size, int table_
             4 : 10;
     int slot = (size>>shift_dig)&63;
     int entry_slot = slot-1;
-    LocalTable *table = local_table[table_level];
-    uint64_t *old_head = table->entries[entry_slot];
+    uint64_t *old_head = local_table[table_level].entries[entry_slot];
     SET_NEXT_BLOCK(block, old_head);
-    table->entries[entry_slot] = block;
+    local_table[table_level].entries[entry_slot] = block;
     if(old_head == NULL){
-        table->index |= 1UL << slot;
+        local_table[table_level].index |= 1UL << slot;
     }else{
         SET_PREV_BLOCK(old_head, block);
     }
