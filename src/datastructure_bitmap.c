@@ -31,46 +31,13 @@ static uint64_t *giant_root = NULL;
 
 tls ThreadInfo *local_thread_info = NULL;
 tls LocalTable *local_table[LOCAL_TABLE_NUMBER];
-tls LocalTable *local_level_0_table = NULL;
-tls LocalTable *local_level_1_table = NULL;
 
 extern tls void *payload_pool;
 extern tls size_t payload_pool_size;
 
 tls uint16_t thread_id;
 
-inline void add_block_LocalTable(uint64_t *block, size_t size, int table_level);
-
-// void print_table(LocalTable *table){
-//     printf("\nindex = %lx\n", table->index);
-//     for(int i = 0; i < 8; i++){
-//         for(int j = 0; j < 8; j++){
-//             printf("%p\t", table->entries[8*i+j]);
-//         }
-//         printf("\n");
-//     }
-// }
-
-/*create a new table without any contents*/
-// LocalTable *create_new_table(){
-//     #ifdef __NOISY_DEBUG
-//     write(1, "create_new_table\n", sizeof("create_new_table"));
-//     #endif
-//     rm_lock(&table_pool_lock);
-//     if(table_meta_pool_usage == TABLE_PER_META_CHUNK){
-//         table_pool = meta_chunk_req(META_CHUNK_SIZE);
-//         table_meta_pool_usage = 0;
-//     }
-//     table_meta_pool_usage ++;
-//     LocalTable *result = table_pool;
-//     table_pool ++;
-
-//     result->index = 0;
-//     // memset(local_level_0_table->entries, 0, sizeof(local_level_0_table->entries));
-//     //meta info will always use fresh memory space, already zeroed
-//     rm_unlock(&table_pool_lock);
-//     return result;
-// }
+static inline void add_block_LocalTable(uint64_t *block, size_t size, int table_level);
 
 /*go through the threadInfo_list to find an inactive one*/
 ThreadInfo *find_inactive_threadInfo(){
@@ -95,6 +62,7 @@ void *threadInfo_pool_init(){
     // init_id is used to create a spinlock so that threadInfo_pool is init only once
     if(init_id == 0){
         threadInfo_pool = meta_chunk_req(META_CHUNK_SIZE);
+        threadInfo_pool_usage = 0;
     }else{
         while(threadInfo_pool==NULL){
             ;
@@ -142,8 +110,6 @@ ThreadInfo *create_new_threadInfo(){
 
     new_threadInfo->next = NULL;
     new_threadInfo->thread_id = id;
-    // new_threadInfo->level_0_table = create_new_table();
-    // new_threadInfo->level_1_table = create_new_table();
     new_threadInfo->payload_pool = NULL;
     new_threadInfo->payload_pool_size = 0;
 
@@ -186,8 +152,6 @@ void set_threadInfo_inactive(void *arg){
     }while(!__sync_bool_compare_and_swap(&(inactive_threadInfo_stack.block_16b), old_block.block_16b, new_block.block_16b));
 
     local_thread_info = NULL;
-    local_level_0_table = NULL;
-    local_level_1_table = NULL;
 
 }
 
@@ -217,15 +181,14 @@ __attribute__ ((constructor)) void thread_bitmap_init(){
     for(int i = 0; i < LOCAL_TABLE_NUMBER; i++){
         local_table[i] = &(inactive_threadInfo->tables[i]);
     }
-    local_level_0_table = &(inactive_threadInfo->level_0_table);
-    local_level_1_table = &(inactive_threadInfo->level_1_table);
     thread_id = inactive_threadInfo->thread_id;
     payload_pool = inactive_threadInfo->payload_pool;
     payload_pool_size = inactive_threadInfo->payload_pool_size;
 
     #ifdef __RACE_TEST
     if(__sync_fetch_and_add(&(local_thread_info->active), 1) > 0){
-        exit(-1);
+        #include <signal.h>
+        raise(SIGABRT);
     }
     #endif
 
@@ -236,6 +199,16 @@ __attribute__ ((constructor)) void thread_bitmap_init(){
     return;
 }
 
+static inline void remove_table_head(uint64_t *block, LocalTable *table, int slot){
+    uint64_t *new_list_head = GET_NEXT_BLOCK(block);
+    table->entries[slot-1] = new_list_head;
+    if(new_list_head==NULL){
+        table->index &= ~(1UL<<slot);
+    }else{
+        SET_PREV_BLOCK(new_list_head, NULL);
+    }
+}
+
 uint64_t *find_bitmap_victim(size_t ori_size){
     #ifdef __NOISY_DEBUG
     write(1, "find_bitmap_victim\n", sizeof("find_bitmap_victim"));
@@ -244,80 +217,20 @@ uint64_t *find_bitmap_victim(size_t ori_size){
     uint64_t *result = NULL;
     uint64_t offset = req_size >> 4;
     int slot;
-    #define entry_slot  (slot-1)
+    // #define entry_slot  (slot-1)
     int table_level;
     for(table_level = 0; table_level < LOCAL_TABLE_NUMBER; table_level++){
         if(offset <= 63){
-            uint64_t *result = NULL;
+            result = NULL;
             uint64_t index_mask = ~((1UL<<offset)-1);
             slot = trailing0s((local_table[table_level]->index)&index_mask);
             if(slot < 64){
-                result = local_table[table_level]->entries[entry_slot];
-                // delete block from table entry
-                // uint64_t *new_list_head = GET_NEXT_BLOCK(result);
-                // table->entries[slot] = new_list_head;
-                // if(new_list_head==NULL){
-                //     table->index &= ~(1UL<<slot);
-                // }else{
-                //     SET_PREV_BLOCK(new_list_head, NULL);
-                // }
+                result = local_table[table_level]->entries[slot-1];
                 break;
             }
         }
         offset = offset >> 6;
     }
-    // uint64_t level_1_offset = (req_size>>10)&63;
-    // uint64_t level_0_offset = (req_size>>4)&63;
-    // uint64_t level_1_index_mask = ~((1UL<<level_1_offset)-1);
-    // uint64_t level_0_index_mask = ~((1UL<<level_0_offset)-1);
-
-    // #ifdef __NOISY_DEBUG
-    // write(1, "finished global table checking\n", sizeof("finished global table checking"));
-    // #endif
-    // // check local table
-
-    // // check small table
-    // if(level_1_offset == 0){
-    //     LocalTable *level_1_table = local_level_0_table;
-    //     uint64_t *table_slot_addr = NULL;
-    //     int level_1_slot = trailing0s((level_1_table->index)&level_0_index_mask);
-    //     if(level_1_slot < 64){
-    //         result = level_1_table->entries[level_1_slot];
-    //         table_slot_addr = (uint64_t*)&(level_1_table->entries[level_1_slot]);
-    //         result_size = level_1_slot<<4;
-    //         uint64_t *new_list_head = GET_NEXT_BLOCK(result);
-    //         level_1_table->entries[level_1_slot] = new_list_head;
-    //         if(new_list_head==NULL){
-    //             level_1_table->index &= ~(1UL<<level_1_slot);
-    //         }else{
-    //             SET_PREV_BLOCK(new_list_head, NULL);
-    //         }
-    //         goto FIND_BITMAP_VICTIM_EXIT;
-    //     }
-    // }
-    // // check large table
-    // uint64_t *table_slot_addr = NULL;
-    // int level_0_slot = trailing0s((local_level_1_table->index)&level_1_index_mask);
-    // if(level_0_slot < 64){
-    //     LocalTable *level_1_table = local_level_1_table->entries[level_0_slot];
-    //     int level_1_slot = trailing0s((level_1_table->index)&level_0_index_mask);
-    //     if(level_1_slot < 64){
-    //         result = level_1_table->entries[level_1_slot];
-    //         table_slot_addr = (uint64_t*)&(level_1_table->entries[level_1_slot]);
-    //         result_size = (((uint64_t)level_0_slot<<6)+level_1_slot)<<4;
-    //         uint64_t *new_list_head = GET_NEXT_BLOCK(result);
-    //         level_1_table->entries[level_1_slot] = new_list_head;
-    //         if(new_list_head==NULL){
-    //             level_1_table->index &= ~(1UL<<level_1_slot);
-    //             if(level_1_table->index == 0){
-    //                 local_level_1_table->index &= ~(1UL<<level_0_slot);
-    //             }
-    //         }else{
-    //             SET_PREV_BLOCK(new_list_head, NULL);
-    //         }
-    //     }
-    // }
-
     #ifdef __NOISY_DEBUG
     write(1, "finished local table checking\n", sizeof("finished local table checking"));
     #endif
@@ -325,45 +238,49 @@ uint64_t *find_bitmap_victim(size_t ori_size){
     if(result != NULL){
         uint64_t table_step = GET_LOCAL_TABLE_STEP(table_level);
         uint64_t result_size = GET_CONTENT(result);
-        uint64_t diff_block_size = result_size - req_size - 16;
-        if(req_size + 16 < table_step){
-            // table structure does not change
-            uint64_t *donator = result;
-            uint64_t new_size = diff_block_size;
-            PACK_PAYLOAD_HEAD(donator, 0, thread_id, new_size);
-            PACK_PAYLOAD_TAIL(donator, 0, new_size);
-            result = GET_PAYLOAD_TAIL(donator, new_size) + 1;
-            result_size = req_size;
-        }else{
-            // table structure change, delete result block from table entry
-            uint64_t *new_list_head = GET_NEXT_BLOCK(result);
-            LocalTable *table = local_table[table_level];
-            table->entries[entry_slot] = new_list_head;
-            if(new_list_head==NULL){
-                table->index &= ~(1UL<<slot);
-            }else{
-                SET_PREV_BLOCK(new_list_head, NULL);
-            }
-            if(diff_block_size >= table_step){
-                // size difference not negligible, make a new block
-                result_size = req_size;
-                uint64_t *new_block = GET_PAYLOAD_TAIL(result, req_size) + 1;
-                PACK_PAYLOAD_HEAD(new_block, 0, thread_id, diff_block_size);
-                PACK_PAYLOAD_TAIL(new_block, 0, diff_block_size);
-                add_block_LocalTable(new_block, diff_block_size, table_level);
-                // add_bitmap_block(new_block, diff_block_size);
+        int64_t diff_block_size = result_size - req_size - 16;
+        // if(result_size == req_size){
+        //     remove_table_head(result, local_table[table_level], slot);
+        // }else if(diff_block_size > 0){
+        //     if(req_size + 16 < table_step){
+        //         uint64_t *donator = result;
+        //         uint64_t new_size = diff_block_size;
+        //         PACK_PAYLOAD_HEAD(donator, 0, 0x11, new_size);
+        //         PACK_PAYLOAD_TAIL(donator, 0, new_size);
+        //         result = GET_PAYLOAD_TAIL(donator, new_size) + 1;
+        //         result_size = req_size;
+        //     }else{
+        //         // table structure change, delete result block from table entry
+        //         remove_table_head(result, local_table[table_level], slot);
+        //         if(diff_block_size >= table_step){
+        //             // size difference not negligible, make a new block
+        //             result_size = req_size;
+        //             uint64_t *new_block = GET_PAYLOAD_TAIL(result, req_size) + 1;
+        //             PACK_PAYLOAD_HEAD(new_block, 0, 0x12, diff_block_size);
+        //             PACK_PAYLOAD_TAIL(new_block, 0, diff_block_size);
+        //             add_block_LocalTable(new_block, diff_block_size, table_level);
+        //             // add_bitmap_block(new_block, diff_block_size);
+        //         }
+        //     }
+        // }
 
-            }
+        remove_table_head(result, local_table[table_level], slot);
+        if(diff_block_size > (int64_t)table_step){
+            result_size = req_size;
+            uint64_t *new_block = GET_PAYLOAD_TAIL(result, req_size) + 1;
+            PACK_PAYLOAD_HEAD(new_block, 0, thread_id, diff_block_size);
+            PACK_PAYLOAD_TAIL(new_block, 0, diff_block_size);
+            add_block_LocalTable(new_block, diff_block_size, table_level);
         }
         PACK_PAYLOAD_HEAD(result, 1, thread_id, result_size);
         PACK_PAYLOAD_TAIL(result, 1, result_size);
     }
     return result;
-    #undef entry_slot
+    // #undef entry_slot
 }
 
 // add a block to the LocalTable indexed as table_level, requires the block to be packed in advance
-inline void add_block_LocalTable(uint64_t *block, size_t size, int table_level){
+static inline void add_block_LocalTable(uint64_t *block, size_t size, int table_level){
     int shift_dig = table_level == 0?
             4 : 10;
     int slot = (size>>shift_dig)&63;
@@ -384,47 +301,7 @@ void add_bitmap_block(uint64_t *block, size_t size){
     #ifdef __NOISY_DEBUG
     write(1, "add_bitmap_block\n", sizeof("add_bitmap_block"));
     #endif
-    // if(block==NULL){
-    //     #ifdef __NOISY_DEBUG
-    //     write(1, "add_bitmap_block received null, returnning\n", sizeof("add_bitmap_block received null, returnning"));
-    //     #endif
-    //     return;
-    // }
-    int table_level = size < 64*16? 0 : 1;
+    int table_level = size < (64*16)? 0 : 1;
     add_block_LocalTable(block, size, table_level);
-    // size -= 16;
-    // uint64_t level_0_offset = (size>>10)&63;
-    // uint64_t level_1_offset = (size>>4)&63;
-
-    // // add to small list
-    // if(level_0_offset == 0){
-    //     LocalTable *level_1_table = local_level_0_table;
-    //     uint64_t *old_list_head = level_1_table->entries[level_1_offset];
-    //     SET_NEXT_BLOCK(block, old_list_head);
-    //     level_1_table->entries[level_1_offset] = block;
-    //     if(old_list_head == NULL){
-    //         level_1_table->index |= 1UL<<level_1_offset;
-    //     }else{
-    //         SET_PREV_BLOCK(old_list_head, block);
-    //     }
-    //     return;
-    // }
-
-    // // add to large list
-    // LocalTable *level_0_table = local_level_1_table;
-    // if(level_0_table->entries[level_0_offset]==NULL){
-    //     level_0_table->entries[level_0_offset] = create_new_table();
-    //     level_0_table->index |= 1UL<<level_0_offset;
-    // }
-    // LocalTable *level_1_table = level_0_table->entries[level_0_offset];
-    // // printf("level 1 table is %p\n", level_1_table);
-    // uint64_t *old_list_head = level_1_table->entries[level_1_offset];
-    // SET_NEXT_BLOCK(block, level_1_table->entries[level_1_offset]);
-    // level_1_table->entries[level_1_offset] = block;
-    // if(old_list_head == NULL){
-    //     level_1_table->index |= 1UL<<level_1_offset;
-    // }else{
-    //     SET_PREV_BLOCK(old_list_head, block);
-    // }
 }
 

@@ -37,8 +37,6 @@ typedef struct ThreadInfo{
     #endif
     int16_t thread_id;
     LocalTable tables[LOCAL_TABLE_NUMBER];
-    LocalTable level_0_table;
-    LocalTable level_1_table;
     struct ThreadInfo *next;
     void *payload_pool;
     size_t payload_pool_size;

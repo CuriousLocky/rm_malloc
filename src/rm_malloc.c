@@ -61,6 +61,7 @@ void rm_free(void *ptr){
     // printf("size = %ld\n", size);
     //payload = coalesce(payload);
     SET_PAYLOAD_TAIL_FREE(payload, size);
+    PACK_PAYLOAD_HEAD(payload, 0, thread_id, size);
     add_bitmap_block(payload, size);
 }
 

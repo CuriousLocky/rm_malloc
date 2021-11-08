@@ -38,7 +38,7 @@ void *create_payload_block(size_t size){
         payload_size = payload_pool_size;
     }
     void *result = payload_pool;
-    PACK_PAYLOAD_HEAD(result, 1, 0x1e, payload_size-16);
+    PACK_PAYLOAD_HEAD(result, 1, thread_id, payload_size-16);
     PACK_PAYLOAD_TAIL(result, 1, payload_size-16);
     payload_pool_size -= payload_size;
     payload_pool = (char*)payload_pool + payload_size;
