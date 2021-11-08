@@ -3,13 +3,13 @@
 #include "mempool.h"
 #include "datastructure_bitmap.h"
 #include "datastructure_payload.h"
-#include "rm_threads.h"
+#include <threads.h>
 
-tls void *payload_pool = NULL;
-tls size_t payload_pool_size = 0;
+thread_local void *payload_pool = NULL;
+thread_local size_t payload_pool_size = 0;
 #define MIN_PAYLOAD_BLOCK_SIZE 32
 
-extern tls uint16_t thread_id;
+extern thread_local uint16_t thread_id;
 
 void payload_init(size_t payload_size){
     #ifdef __NOISY_DEBUG

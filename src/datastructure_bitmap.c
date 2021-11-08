@@ -3,7 +3,7 @@
 #include <stdbool.h>
 #include <stdio.h>
 
-#include "rm_threads.h"
+#include <threads.h>
 
 #include "datastructure_bitmap.h"
 #include "datastructure_payload.h"
@@ -13,7 +13,6 @@
 #define THREADINFO_PER_CHUNK (META_CHUNK_SIZE/sizeof(ThreadInfo))
 
 // rm_lock_t threadInfo_pool_lock = RM_LOCK_INITIALIZER;
-rm_lock_t table_pool_lock = RM_LOCK_INITIALIZER;
 
 static LocalTable *table_pool = NULL;
 static ThreadInfo *threadInfo_pool = NULL;
@@ -29,13 +28,13 @@ static int table_meta_pool_usage = TABLE_PER_META_CHUNK;
 
 static uint64_t *giant_root = NULL;
 
-tls ThreadInfo *local_thread_info = NULL;
-tls LocalTable *local_table[LOCAL_TABLE_NUMBER];
+thread_local ThreadInfo *local_thread_info = NULL;
+thread_local LocalTable *local_table[LOCAL_TABLE_NUMBER];
 
-extern tls void *payload_pool;
-extern tls size_t payload_pool_size;
+extern thread_local void *payload_pool;
+extern thread_local size_t payload_pool_size;
 
-tls uint16_t thread_id;
+thread_local uint16_t thread_id;
 
 static inline void add_block_LocalTable(uint64_t *block, size_t size, int table_level);
 

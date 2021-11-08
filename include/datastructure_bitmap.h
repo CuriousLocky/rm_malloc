@@ -5,7 +5,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 
-#include "rm_threads.h"
+#include <threads.h>
 
 #define LOCAL_TABLE_NUMBER      2
 #define SHARED_TABLE_NUMBER     4

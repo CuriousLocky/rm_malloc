@@ -6,7 +6,7 @@
 #include "datastructure_payload.h"
 #include "mempool.h"
 
-extern tls uint16_t thread_id;
+extern thread_local uint16_t thread_id;
 
 typedef struct{
     int prezeroed_flag; // to indicate whether the block is pre-zeroed

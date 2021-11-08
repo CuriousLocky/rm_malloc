@@ -1,5 +1,5 @@
 #include "pthread_wrapper.h"
-#include "rm_threads.h"
+#include <threads.h>
 #include "datastructure_bitmap.h"
 #include "rm_malloc.h"
 
@@ -14,7 +14,6 @@ typedef int (*pthread_create_fpt)(pthread_t *, const pthread_attr_t *, void *(*)
 
 static pthread_create_fpt thread_create = NULL;
 volatile uint8_t thread_create_init_flag = 0;
-rm_lock_t thread_create_fpt_lock = RM_LOCK_INITIALIZER;
 
 typedef struct Task{
     void *(*routine)(void *);
