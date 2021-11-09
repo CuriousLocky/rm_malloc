@@ -22,11 +22,14 @@ static volatile uint16_t threadInfo_count = 0;
 
 volatile NonBlockingStackBlock inactive_threadInfo_stack;
 
+#define BIG_BLOCK_MIN   (1<<16)
+// to store blocks with size >= BIG_BLOCK_MIN, <= PAYLOAD_CHUNK_SIZE
+volatile NonBlockingStackBlock big_block_stack = {.block_16b=0};
+
+thread_local uint64_t *local_big_block = NULL;
+
 //the default values are for initialization in the first call in init functions
 static int table_meta_pool_usage = TABLE_PER_META_CHUNK;
-// static int threadInfo_meta_pool_usage = THREADINFO_PER_CHUNK;
-
-static uint64_t *giant_root = NULL;
 
 thread_local ThreadInfo *local_thread_info = NULL;
 // thread_local LocalTable *local_table[LOCAL_TABLE_NUMBER];
@@ -42,17 +45,7 @@ static inline void add_block_LocalTable(uint64_t *block, size_t size, int table_
 /*go through the threadInfo_list to find an inactive one*/
 ThreadInfo *find_inactive_threadInfo(){
     // pop the current inactive threadinfo from the stack
-    NonBlockingStackBlock old_block;
-    NonBlockingStackBlock new_block;
-    do{
-        old_block = inactive_threadInfo_stack;
-        if(old_block.block_struct.ptr == NULL){
-            return NULL;
-        }
-        new_block.block_struct.ptr = ((ThreadInfo*)(old_block.block_struct.ptr))->next;
-        new_block.block_struct.id = old_block.block_struct.id+1;
-    }while(!__sync_bool_compare_and_swap(&(inactive_threadInfo_stack.block_16b), old_block.block_16b, new_block.block_16b));
-    return old_block.block_struct.ptr;
+    return pop_nonblocking_stack(inactive_threadInfo_stack, get_threadInfo_next);
 }
 
 /*initialize the threadInfo_pool with sufficient space so that it will never need to expand*/
@@ -130,20 +123,14 @@ void set_threadInfo_inactive(void *arg){
     #endif
     local_thread_info->payload_pool = payload_pool;
     local_thread_info->payload_pool_size = payload_pool_size;
+    local_thread_info->big_block = local_big_block;
 
     #ifdef __RACE_TEST
     __sync_fetch_and_sub(&(local_thread_info->active), 1);
     #endif
 
     // push current threadinfo to the non-blocking stack
-    NonBlockingStackBlock new_block;
-    NonBlockingStackBlock old_block;
-    new_block.block_struct.ptr = local_thread_info;
-    do{
-        old_block = inactive_threadInfo_stack;
-        local_thread_info->next = old_block.block_struct.ptr;
-        new_block.block_struct.id = old_block.block_struct.id+1;
-    }while(!__sync_bool_compare_and_swap(&(inactive_threadInfo_stack.block_16b), old_block.block_16b, new_block.block_16b));
+    push_nonblocking_stack(local_thread_info, inactive_threadInfo_stack, set_threadInfo_next);
 
     local_thread_info = NULL;
 
@@ -172,13 +159,11 @@ __attribute__ ((constructor)) void thread_bitmap_init(){
         inactive_threadInfo = create_new_threadInfo();
     }
     local_thread_info = inactive_threadInfo;
-    // for(int i = 0; i < LOCAL_TABLE_NUMBER; i++){
-    //     local_table[i] = &(inactive_threadInfo->tables[i]);
-    // }
     local_table = inactive_threadInfo->tables;
     thread_id = inactive_threadInfo->thread_id;
     payload_pool = inactive_threadInfo->payload_pool;
     payload_pool_size = inactive_threadInfo->payload_pool_size;
+    local_big_block = inactive_threadInfo->big_block;
 
     #ifdef __RACE_TEST
     if(__sync_fetch_and_add(&(local_thread_info->active), 1) > 0){
@@ -204,10 +189,54 @@ static inline void remove_table_head(uint64_t *block, LocalTable *table, int slo
     }
 }
 
+uint64_t *utilize_big_block(size_t req_size){
+    if(local_big_block == NULL){
+        local_big_block = pop_nonblocking_stack(big_block_stack, GET_NEXT_BLOCK);
+        if(local_big_block == NULL){
+            return NULL;
+        }
+    }
+    uint64_t big_block_size = GET_CONTENT(local_big_block);
+    if(req_size > big_block_size){
+        return NULL;
+    }
+    uint64_t *result = local_big_block;
+    uint64_t result_size = big_block_size;
+    if((req_size*2) >= big_block_size){
+        local_big_block = NULL;
+    }else{
+        uint64_t diff_block_size = big_block_size - req_size - 16;
+        if(diff_block_size >= BIG_BLOCK_MIN){
+            // donor system
+            uint64_t *donator = result;
+            uint64_t new_size = diff_block_size;
+            PACK_PAYLOAD_HEAD(donator, 0, thread_id, new_size);
+            PACK_PAYLOAD_TAIL(donator, 0, new_size);
+            result = GET_PAYLOAD_TAIL(donator, new_size) + 1;
+            result_size = req_size;
+        }else{
+            local_big_block = NULL;
+            result_size = req_size;
+            uint64_t *new_block = GET_PAYLOAD_TAIL(result, req_size) + 1;
+            PACK_PAYLOAD_HEAD(new_block, 0, thread_id, diff_block_size);
+            PACK_PAYLOAD_TAIL(new_block, 0, diff_block_size);
+            add_bitmap_block(new_block, diff_block_size);
+        }
+    }
+    PACK_PAYLOAD_HEAD(result, 1, thread_id, result_size);
+    PACK_PAYLOAD_TAIL(result, 1, result_size);
+    return result;
+}
+
+// look for a victim block in tables and local big block pool, requested size < (3/4)PAYLOAD_CHUNK_SIZE-16
+// the returned block is not zeroed
 uint64_t *find_bitmap_victim(size_t ori_size){
     #ifdef __NOISY_DEBUG
     write(1, "find_bitmap_victim\n", sizeof("find_bitmap_victim"));
     #endif
+    if(ori_size >= BIG_BLOCK_MIN){
+        return utilize_big_block(ori_size);
+    }
     size_t req_size = ori_size;
     uint64_t *result = NULL;
     uint64_t offset = req_size >> 4;
@@ -255,6 +284,8 @@ uint64_t *find_bitmap_victim(size_t ori_size){
         }
         PACK_PAYLOAD_HEAD(result, 1, thread_id, result_size);
         PACK_PAYLOAD_TAIL(result, 1, result_size);
+    }else{
+        result = utilize_big_block(req_size);
     }
     return result;
     // #undef entry_slot
@@ -280,6 +311,10 @@ void add_bitmap_block(uint64_t *block, size_t size){
     #ifdef __NOISY_DEBUG
     write(1, "add_bitmap_block\n", sizeof("add_bitmap_block"));
     #endif
+    if(size >= BIG_BLOCK_MIN){
+        push_nonblocking_stack(block, big_block_stack, SET_NEXT_BLOCK);
+        return;
+    }
     int table_level = size < (64*16)? 0 : 1;
     add_block_LocalTable(block, size, table_level);
 }

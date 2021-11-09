@@ -41,6 +41,7 @@ typedef struct ThreadInfo{
     struct ThreadInfo *next;
     void *payload_pool;
     size_t payload_pool_size;
+    uint64_t *big_block;
 } ThreadInfo;
 
 inline uint64_t *GET_NEXT_BLOCK(uint64_t *block){
@@ -90,6 +91,43 @@ inline int leading0s(uint64_t x){
         }
         return result;
     #endif
+}
+
+inline void set_threadInfo_next(ThreadInfo *head, ThreadInfo *next){
+    head->next = next;
+}
+
+inline void *get_threadInfo_next(ThreadInfo *threadInfo){
+    return threadInfo->next;
+}
+
+/*returns the top of a nonblocking stack*/
+#define pop_nonblocking_stack(stack, get_next)                                                              \
+({                                                                                                          \
+    NonBlockingStackBlock old_block;                                                                        \
+    NonBlockingStackBlock new_block;                                                                        \
+    void *result = NULL;                                                                                    \
+    do{                                                                                                     \
+        old_block = stack;                                                                                  \
+        if(old_block.block_struct.ptr == NULL){                                                             \
+            break;                                                                                          \
+        }                                                                                                   \
+        new_block.block_struct.ptr = get_next(old_block.block_struct.ptr);                                  \
+        new_block.block_struct.id = old_block.block_struct.id+1;                                            \
+    }while(!__sync_bool_compare_and_swap(&(stack.block_16b), old_block.block_16b, new_block.block_16b));    \
+    result;                                                                                                 \
+})
+
+/*a pseudo function to push a ptr to a nonblocking stack*/
+#define push_nonblocking_stack(pushed_ptr, stack, set_next){                                                \
+    NonBlockingStackBlock new_block;                                                                        \
+    NonBlockingStackBlock old_block;                                                                        \
+    new_block.block_struct.ptr = pushed_ptr;                                                                \
+    do{                                                                                                     \
+        old_block = stack;                                                                                  \
+        set_next(pushed_ptr, old_block.block_struct.ptr);                                                   \
+        new_block.block_struct.id = old_block.block_struct.id+1;                                            \
+    }while(!__sync_bool_compare_and_swap(&(stack.block_16b), old_block.block_16b, new_block.block_16b));    \
 }
 
 /*initialize the bitmap structure, should be called once per thread*/
