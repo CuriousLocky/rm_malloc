@@ -20,9 +20,10 @@ typedef union{
 }NonBlockingStackBlock;
 
 /*each bit of index is for indicating whether entries[i]==NULL*/
-typedef struct{
+typedef union{
     uint64_t index;
-    void *entries[64];
+    // entries[0] is never used
+    uint64_t *entries[64];
 } LocalTable;
 
 /*works like LocalTable but shared, so entries organized by non-blocking stacks*/

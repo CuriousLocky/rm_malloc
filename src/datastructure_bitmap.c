@@ -76,12 +76,6 @@ ThreadInfo *create_new_threadInfo(){
     #ifdef __NOISY_DEBUG
     write(1, "create_new_threadInfo\n", sizeof("create_new_threadInfo"));
     #endif
-    // rm_lock(&threadInfo_pool_lock);
-    // if(threadInfo_meta_pool_usage == THREADINFO_PER_CHUNK){
-    //     threadInfo_pool = meta_chunk_req(META_CHUNK_SIZE);
-    //     threadInfo_meta_pool_usage = 0;
-    // }
-    // threadInfo_meta_pool_usage ++;
     uint16_t id = __atomic_fetch_add(&threadInfo_count, 1, __ATOMIC_RELAXED);
 
     uint16_t offset;
@@ -202,7 +196,7 @@ __attribute__ ((constructor)) void thread_bitmap_init(){
 
 static inline void remove_table_head(uint64_t *block, LocalTable *table, int slot){
     uint64_t *new_list_head = GET_NEXT_BLOCK(block);
-    table->entries[slot-1] = new_list_head;
+    table->entries[slot] = new_list_head;
     if(new_list_head==NULL){
         table->index &= ~(1UL<<slot);
     }else{
@@ -226,7 +220,7 @@ uint64_t *find_bitmap_victim(size_t ori_size){
             uint64_t index_mask = ~((1UL<<offset)-1);
             slot = trailing0s((local_table[table_level].index)&index_mask);
             if(slot < 64){
-                result = local_table[table_level].entries[slot-1];
+                result = local_table[table_level].entries[slot];
                 break;
             }
         }
@@ -241,7 +235,7 @@ uint64_t *find_bitmap_victim(size_t ori_size){
         uint64_t result_size = GET_CONTENT(result);
         int64_t diff_block_size = result_size - req_size - 16;
         uint64_t bit_size_diff = result_size ^ diff_block_size;
-        if(diff_block_size > 0 && leading0s(bit_size_diff) > leading0s(table_step)){
+        if(diff_block_size > 0 && bit_size_diff < table_step){
             // table structure not changed
             uint64_t *donator = result;
             uint64_t new_size = diff_block_size;
@@ -271,10 +265,9 @@ static inline void add_block_LocalTable(uint64_t *block, size_t size, int table_
     int shift_dig = table_level == 0?
             4 : 10;
     int slot = (size>>shift_dig)&63;
-    int entry_slot = slot-1;
-    uint64_t *old_head = local_table[table_level].entries[entry_slot];
+    uint64_t *old_head = local_table[table_level].entries[slot];
     SET_NEXT_BLOCK(block, old_head);
-    local_table[table_level].entries[entry_slot] = block;
+    local_table[table_level].entries[slot] = block;
     if(old_head == NULL){
         local_table[table_level].index |= 1UL << slot;
     }else{
