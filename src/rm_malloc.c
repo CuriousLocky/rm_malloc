@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <signal.h>
 #include "rm_malloc.h"
 #include "datastructure_bitmap.h"
 #include "datastructure_payload.h"
@@ -13,6 +14,39 @@ typedef struct{
     uint64_t *ptr;  // the result of malloc
 }MallocResult;
 
+#ifdef SANITY_TEST
+#define TEST_THREAD_LIMIT 0x18
+__attribute__((optimize(0)))
+void check_valid_header(uint64_t *block){
+    uint64_t size = GET_CONTENT(block);
+    uint64_t id = GET_ID(block);
+    bool size_valid = (size & 15)==0;
+    bool id_valid = (id<=TEST_THREAD_LIMIT) || (id==ID_MASK) ;
+    if(!(size_valid && id_valid)){
+        raise(SIGABRT);
+    }
+}
+
+__attribute__((optimize(0)))
+void check_valid_tail(uint64_t *tail){
+    uint64_t *head = GET_PAYLOAD_HEAD(tail);
+    uint64_t *real_tail = GET_PAYLOAD_TAIL(head, GET_CONTENT(head));
+    if(tail != real_tail){
+        raise(SIGABRT);
+    }
+}
+
+__attribute__((optimize(0)))
+void check_front_behind_sanity(uint64_t *block){
+    uint64_t *front_tail = block - 1;
+    uint64_t *front_head = GET_PAYLOAD_HEAD(front_tail);
+    uint64_t *behind_head = GET_PAYLOAD_TAIL(block, GET_CONTENT(block)) + 1;
+    check_valid_header(front_head);
+    check_valid_header(behind_head);
+    check_valid_tail(front_tail);
+}
+#endif
+
 inline MallocResult __rm_malloc(size_t ori_size){
     MallocResult result;
     size_t size = align(ori_size, 16);
@@ -24,6 +58,9 @@ inline MallocResult __rm_malloc(size_t ori_size){
         result.prezeroed_flag = 0;
         result.ptr = victim_block;
     }
+    #ifdef SANITY_TEST
+        check_front_behind_sanity(result.ptr);
+    #endif
     result.ptr ++;
     return result;
 }
@@ -37,13 +74,6 @@ void *rm_malloc(size_t ori_size){
 __attribute__((visibility("default")))
 void *malloc(size_t size) __attribute__((weak, alias("rm_malloc")));
 
-// uint64_t *coalesce(uint64_t *payload){
-//     uint64_t *forward_payload_tail = payload-1;
-//     uint64_t *next_payload_head = GET_PAYLOAD_TAIL(payload, GET_CONTENT(payload));
-//     if(!IS_ALLOC(forward_payload_tail)){
-
-//     }
-// }
 __attribute__((visibility("default")))
 void rm_free(void *ptr){
     if(ptr==NULL){return;}
@@ -55,14 +85,22 @@ void rm_free(void *ptr){
     uint64_t *payload = ((uint64_t*)ptr) - 1;
     if(!IS_ALLOC(payload)){
         perror("double free\n");
+        raise(SIGABRT);
         exit(-1);
     }
-    size_t size = GET_CONTENT(payload);
+    #ifdef SANITY_TEST
+        check_front_behind_sanity(payload);
+    #endif
+    uint64_t *block_to_add = coalesce(payload);
+    if(block_to_add == NULL){
+        return;
+    }
+    size_t size = GET_CONTENT(block_to_add);
     // printf("size = %ld\n", size);
-    //payload = coalesce(payload);
-    SET_PAYLOAD_TAIL_FREE(payload, size);
-    PACK_PAYLOAD_HEAD(payload, 0, thread_id, size);
-    add_bitmap_block(payload, size);
+    //block_to_add = coalesce(block_to_add);
+    PACK_PAYLOAD_HEAD(block_to_add, 0, thread_id, size);
+    PACK_PAYLOAD_TAIL(block_to_add, 0, size);
+    add_bitmap_block(block_to_add, size);
 }
 
 __attribute__((visibility("default")))
