@@ -29,18 +29,23 @@ static inline void SET_PAYLOAD_TAIL_ALLOC(uint64_t *payload_head, size_t size){
     uint64_t *payload_tail = GET_PAYLOAD_TAIL(payload_head, size);
     *payload_tail |= ALLOC_MASK;
 }
-static inline void PACK_PAYLOAD_TAIL(uint64_t *payload_head, int alloc, size_t size){
+static inline void PACK_PAYLOAD_TAIL(uint64_t *payload_head, int alloc, int thread_id, size_t size){
     uint64_t *payload_tail = GET_PAYLOAD_TAIL(payload_head, size);
-    *payload_tail = (uint64_t)alloc | (uint64_t)payload_head;
+    *payload_tail = (uint64_t)alloc | ((uint64_t)thread_id << 48) | (uint64_t)payload_head;
 }
 static inline void PACK_PAYLOAD_HEAD(uint64_t *payload_head, int alloc, uint16_t thread_id, uint64_t content){
     *payload_head = (uint64_t)alloc  | ((uint64_t)thread_id << 48) | content;
 }
+static inline void PACK_PAYLOAD(uint64_t *payload_head, uint16_t thread_id, int alloc, size_t size){
+    PACK_PAYLOAD_HEAD(payload_head, alloc, thread_id, size);
+    PACK_PAYLOAD_TAIL(payload_head, alloc, thread_id, size);
+}
+
 static inline int IS_ALLOC(uint64_t *payload_head){
     return (*payload_head)&1;
 }
-static inline int GET_ID(uint64_t *payload_head){
-    return ((*payload_head)>>48)&ID_MASK;
+static inline int GET_ID(uint64_t *payload){
+    return ((*payload)>>48)&ID_MASK;
 }
 
 void *create_payload_block(size_t size);

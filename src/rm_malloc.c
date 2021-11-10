@@ -98,8 +98,7 @@ void rm_free(void *ptr){
     size_t size = GET_CONTENT(block_to_add);
     // printf("size = %ld\n", size);
     //block_to_add = coalesce(block_to_add);
-    PACK_PAYLOAD_HEAD(block_to_add, 0, thread_id, size);
-    PACK_PAYLOAD_TAIL(block_to_add, 0, size);
+    PACK_PAYLOAD(block_to_add, thread_id, 0, size);
     add_bitmap_block(block_to_add, size);
 }
 
