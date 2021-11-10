@@ -8,6 +8,7 @@
 #include <sys/time.h>
 #include <time.h>
 #include <limits.h>
+#include <signal.h>
 
 #define MAXLINE 1024
 #define STEP 1
@@ -58,6 +59,10 @@ void test_single(char* file_name, int thread_id){
 	while(fgets(line_buffer, MAXLINE, trace)!=NULL){
 		line_number ++;
 		// printf("thread %d, line %d\n", thread_id, line_number);
+		// if(line_number >= 6){
+		// 	#include <signal.h>
+		// 	raise(SIGABRT);
+		// }
 		char op = 'b';
 		int pos = -1;
 		size_t request_size = -1;
@@ -81,9 +86,12 @@ void test_single(char* file_name, int thread_id){
 			for(int i = 0; i < pointer_pool_size; i++){
 				if(pointer_pool[i]!=NULL && 
 					((pointer>=pointer_pool[i] && pointer<pointer_end[i])||
-						pointer_end_tmp>=pointer_pool[i] && pointer_end_tmp<pointer_end[i])){
-					printf("result overlapped\n");
+						(pointer_end_tmp>=pointer_pool[i] && pointer_end_tmp<pointer_end[i]) ||
+						(pointer_pool[i]>=pointer && pointer_pool[i]<pointer_end_tmp) ||
+						(pointer_end[i]>=pointer && pointer_end[i]<pointer_end_tmp))){
+					printf("result overlapped, result is %p\n", pointer);
 					printf("i = %d\n", i);
+					raise(SIGABRT);
 					exit(0);
 				}
 			}
@@ -97,7 +105,7 @@ void test_single(char* file_name, int thread_id){
 			printf("Broken trace file\n");
 			exit(0);
 		}
-		printf("thread %d, line %d completed\n", thread_id, line_number);
+		// printf("thread %d, line %d completed\n", thread_id, line_number);
 	}
 	printf("thread %d, test %s completed\n", thread_id, file_name);
 	fclose(trace);	

@@ -99,7 +99,12 @@ int main(int argc, char** argv){
             case ARG_LIB:{
                     printf("path is %s\n", optarg);
                     void *lib = dlopen(optarg, RTLD_NOW);
-                    printf("lib is %p\n", lib);
+                    if(lib == NULL){
+                        printf("failed to load library, %s\n", dlerror());
+                        exit(0);
+                    }else{
+                        printf("successfully loaded library, address = %p\n", lib);
+                    }
                     my_malloc = dlsym(lib, "malloc");
                     my_free = dlsym(lib, "free");
                     my_pthread_create = dlsym(lib, "pthread_create");
