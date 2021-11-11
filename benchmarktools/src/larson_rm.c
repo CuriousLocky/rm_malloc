@@ -5,6 +5,8 @@
 #include <time.h>
 #include <unistd.h>
 #include <inttypes.h>
+#include <stdbool.h>
+#include <sys/time.h>
 
 #include <dlfcn.h>
 
@@ -13,6 +15,8 @@
 
 #define PSEUDOSEED 92320736
 
+bool recordFlag = false;
+char recordFile[128] = "memory_record.csv";
 int minSize = 10;
 int maxSize = 1000;
 int pairNum = 50000;
@@ -32,7 +36,8 @@ int (*my_pthread_create)(pthread_t*, const pthread_attr_t*,
     void *(*)(void *), void*) = pthread_create;
 
 enum args{
-    ARG_MINSIZE, ARG_MAXSIZE, ARG_THREAD, ARG_RANDOM, ARG_ARRAY, ARG_PAIR, ARG_SLEEP, ARG_LIB
+    ARG_MINSIZE, ARG_MAXSIZE, ARG_THREAD, ARG_RANDOM, ARG_ARRAY, ARG_PAIR, ARG_SLEEP, ARG_LIB,
+    ARG_RECORD, ARG_RECORD_FILE
 };
 
 struct option longopts[] = {
@@ -43,42 +48,12 @@ struct option longopts[] = {
     {"array",   required_argument,  NULL, ARG_ARRAY},
     {"pair",    required_argument,  NULL, ARG_PAIR},
     {"sleep",   required_argument,  NULL, ARG_SLEEP},
-    {"lib",     required_argument,  NULL, ARG_LIB}
+    {"lib",     required_argument,  NULL, ARG_LIB},
+    {"record",  optional_argument,  NULL, ARG_RECORD},
+    {"out",     required_argument,  NULL, ARG_RECORD_FILE}
 };
 
-uint gen_pseudo_rand(uint input){
-    input ^= input<<13;
-    input ^= input>>17;
-    input ^= input<<5;
-    return input;
-}
-
-void *run_thread(void *arg){
-    char **pointerArr = arg;
-    uint64_t allocNum_thread;
-    uint randomNum = rand();
-    for(allocNum_thread = 0; allocNum_thread < pairNum; allocNum_thread++){
-        if(term){break;}
-        randomNum = gen_pseudo_rand(randomNum);
-        int operationPos = randomNum%arraySize;
-        my_free(pointerArr[operationPos]);
-        randomNum = gen_pseudo_rand(randomNum);
-        int allocSize = minSize + (randomNum%(maxSize-minSize));
-        pointerArr[operationPos] = my_malloc(allocSize);
-    }
-    __sync_add_and_fetch(&allocNum, allocNum_thread);
-    // pthread_spin_lock(&allocNumLock);
-    // allocNum += allocNum_thread;
-    // pthread_spin_unlock(&allocNumLock);
-    if(!term){
-        pthread_t newThread;
-        my_pthread_create(&newThread, NULL, run_thread, pointerArr);
-        pthread_detach(newThread);
-    }
-    return NULL;
-}
-
-int main(int argc, char** argv){
+void parse_arg(int argc, char** argv){
     int arg_opt;
     while((arg_opt = getopt_long_only(argc, argv, "h", longopts, NULL))!=-1){
         switch (arg_opt){
@@ -113,15 +88,96 @@ int main(int argc, char** argv){
                         my_pthread_create = pthread_create;
                     }
                 } break;
+            case ARG_RECORD:
+                if(optarg != NULL && atoi(optarg)==0){
+                    recordFlag = false;
+                }else{
+                    recordFlag = true;
+                }
+                break;
+            case ARG_RECORD_FILE:
+                strcpy(recordFile, optarg);
+                break;
             default:
                 printf("unsupported flag\n");
                 exit(0);
         }
     }
+}
+
+uint gen_pseudo_rand(uint input){
+    input ^= input<<13;
+    input ^= input>>17;
+    input ^= input<<5;
+    return input;
+}
+
+void *run_thread(void *arg){
+    char **pointerArr = arg;
+    uint64_t allocNum_thread;
+    uint randomNum = rand();
+    for(allocNum_thread = 0; allocNum_thread < pairNum; allocNum_thread++){
+        if(term){break;}
+        randomNum = gen_pseudo_rand(randomNum);
+        int operationPos = randomNum%arraySize;
+        my_free(pointerArr[operationPos]);
+        randomNum = gen_pseudo_rand(randomNum);
+        int allocSize = minSize + (randomNum%(maxSize-minSize));
+        pointerArr[operationPos] = my_malloc(allocSize);
+    }
+    __sync_add_and_fetch(&allocNum, allocNum_thread);
+    // pthread_spin_lock(&allocNumLock);
+    // allocNum += allocNum_thread;
+    // pthread_spin_unlock(&allocNumLock);
+    if(!term){
+        pthread_t newThread;
+        my_pthread_create(&newThread, NULL, run_thread, pointerArr);
+        pthread_detach(newThread);
+    }
+    return NULL;
+}
+
+void *record_mem(void *arg){
+	// char *procFilePath = arg;
+	FILE *recordFile = fopen(arg, "w");
+	struct timeval start;
+	gettimeofday(&start, NULL);
+	fprintf(recordFile, "timestamp,rss_in_bytes\n");
+	while(!term){
+		FILE *procFile = fopen("/proc/self/status", "r");
+		if(procFile==NULL){pthread_exit(NULL);}
+		long memoryUsage = 0;
+		char lineBuffer[1024];
+		char *targetLine = NULL;
+		while(fgets(lineBuffer, 1024, procFile)){
+			// printf("%s\n", lineBuffer);
+			targetLine = strstr(lineBuffer, "VmRSS");
+			if(targetLine){
+				sscanf(targetLine, "VmRSS: %ld kB", &memoryUsage);
+				break;
+			}
+		}
+		fclose(procFile);
+		struct timeval now;
+		gettimeofday(&now, NULL);
+		double time = (now.tv_sec - start.tv_sec) + ((double)now.tv_usec-start.tv_usec)/1000000;
+		fprintf(recordFile, "%.3f,%ld\n", time, memoryUsage*1024);
+		usleep(1000*100);
+	}
+}
+
+int main(int argc, char** argv){
+    parse_arg(argc, argv);
     printf("random seed =\t%d\n", randomSeed);
     printf("pair number =\t%d\n", pairNum);
     printf("array size =\t%d\n", arraySize);
     printf("thread number =\t%d\n", threadNum);
+    if(recordFlag){
+        printf("memory record file =\t%s\n", recordFile);
+        pthread_t thread;
+        pthread_create(&thread, NULL, record_mem, recordFile);
+        pthread_detach(thread);
+    }
     pthread_spin_init(&allocNumLock, PTHREAD_PROCESS_PRIVATE);
     srand(randomSeed);
     // pthread_t threadPool[threadNum];
