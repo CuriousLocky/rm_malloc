@@ -4,11 +4,12 @@
 #include <inttypes.h>
 #include <stdbool.h>
 #include <stddef.h>
+#include <limits.h>
 
 #include <threads.h>
 
-#define LOCAL_TABLE_NUMBER      2
-#define SHARED_TABLE_NUMBER     4
+inline int trailing0s(uint64_t x);
+inline int leading0s(uint64_t x);
 
 // A non-blocking stack is used for storing inactive threadinfo for reusage
 typedef union{
@@ -37,7 +38,7 @@ typedef struct ThreadInfo{
     int active;
     #endif
     int16_t thread_id;
-    LocalTable tables[LOCAL_TABLE_NUMBER];
+    LocalTable table;
     struct ThreadInfo *next;
     void *payload_pool;
     size_t payload_pool_size;
@@ -56,19 +57,28 @@ inline uint64_t *GET_PREV_BLOCK(uint64_t *block){
 inline void SET_PREV_BLOCK(uint64_t *block, uint64_t *prev){
     *(block+2) = (uint64_t)prev;
 }
-inline int GET_LOCAL_TABLE_SHIFT_DIG(int table_level){
-    return table_level? 10 : 4;
+inline int GET_SLOT(uint64_t size){
+    return __builtin_popcountl(size);
 }
-inline uint64_t GET_LOCAL_TABLE_STEP(int table_level){
-    return 1UL << GET_LOCAL_TABLE_SHIFT_DIG(table_level);
+
+// align a size to a format of 2^n-16
+inline uint64_t BUDDIFY(uint64_t size){
+    int leading_0_num = leading0s(size);
+    return ((~(INT64_MIN>>leading_0_num))<<1) & (-16L);
 }
-inline int GET_LOCAL_TABLE_LEVEL(uint64_t size){
-    return size < (64*16)? 0 : 1;
+
+// get a mask for index querying
+inline uint64_t GET_MASK(uint64_t buddy_size){
+    return ~(buddy_size>>4);
 }
-inline int GET_LOCAL_TABLE_SLOT(uint64_t size, int table_level){
-    int level_0_slot = (size >> 4)&63;
-    int level_1_slot = (size >> 10)&63;
-    return table_level? level_1_slot : level_0_slot;
+
+// get a split block size
+inline uint64_t GET_SPLIT_SIZE(uint64_t size){
+    return (size >> 1) & (-16L);
+}
+
+inline bool IS_BUDDY_SIZE(uint64_t size){
+    return __builtin_popcountl(size+16)==1;
 }
 
 /*returns the number of trailing zeros of an uint64_t*/
@@ -86,9 +96,8 @@ inline int trailing0s(uint64_t x){
     #endif
 }
 
-/*returns the number of leading zeros of an uint64_t*/
+/*returns the number of leading zeros of an uint64_t, does not take 0 input*/
 inline int leading0s(uint64_t x){
-    if(x==0){return 64;}
     #ifdef __GNUC__
         return __builtin_clzll(x);
     #else
@@ -150,5 +159,8 @@ void add_bitmap_block(uint64_t *block, size_t size);
 
 /*try to coalesce with forward and next block, returns the block to add*/
 uint64_t *coalesce(uint64_t *payload);
+
+/*transfer a non-buddy block to (many) buddy blocks and add*/
+void *buddify_add(uint64_t *block, size_t size);
 
 #endif

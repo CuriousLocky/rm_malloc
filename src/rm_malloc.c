@@ -74,6 +74,7 @@ void *rm_malloc(size_t ori_size){
 __attribute__((visibility("default")))
 void *malloc(size_t size) __attribute__((weak, alias("rm_malloc")));
 
+uint64_t *problem_ptr;
 __attribute__((visibility("default")))
 void rm_free(void *ptr){
     if(ptr==NULL){return;}
@@ -96,6 +97,12 @@ void rm_free(void *ptr){
         return;
     }
     size_t size = GET_CONTENT(block_to_add);
+    if(!IS_BUDDY_SIZE(size)){
+        problem_ptr = block_to_add;
+        perror("not buddy size\n");
+        raise(SIGABRT);
+        exit(-1);
+    }
     // printf("size = %ld\n", size);
     //block_to_add = coalesce(block_to_add);
     PACK_PAYLOAD(block_to_add, thread_id, 0, size);
