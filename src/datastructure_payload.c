@@ -15,10 +15,10 @@ void payload_init(size_t payload_size){
     #ifdef __NOISY_DEBUG
     write(1, "into payload_init\n", sizeof("into payload_init"));
     #endif
-    size_t new_pool_size = align(payload_size+32, PAYLOAD_CHUNK_SIZE) - 32;
+    size_t new_pool_size = align(payload_size+16, PAYLOAD_CHUNK_SIZE) - 16;
     uint64_t *new_payload_pool = (uint64_t*)payload_chunk_req(payload_size);
     PACK_PAYLOAD(new_payload_pool, ID_MASK, 1, new_pool_size);
-    payload_pool = new_payload_pool + 3;
+    payload_pool = new_payload_pool + 1;
     payload_pool_size = new_pool_size;
 }
 
