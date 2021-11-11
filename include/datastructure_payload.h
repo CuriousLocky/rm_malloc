@@ -19,7 +19,7 @@ static inline uint64_t *GET_PAYLOAD_HEAD(uint64_t *payload_tail){
     return (uint64_t*)GET_CONTENT(payload_tail);
 }
 static inline uint64_t *GET_PAYLOAD_TAIL(uint64_t *payload_head, size_t size){
-    return (uint64_t*)((char*)payload_head + size + 8);
+    return (uint64_t*)((char*)payload_head + size - 8);
 }
 static inline void SET_PAYLOAD_TAIL_FREE(uint64_t *payload_head, size_t size){
     uint64_t *payload_tail = GET_PAYLOAD_TAIL(payload_head, size);

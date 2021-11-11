@@ -1,4 +1,5 @@
 #include "mempool.h"
+#include "datastructure_bitmap.h"
 
 /*Edit these functions for different memory system backend*/
 

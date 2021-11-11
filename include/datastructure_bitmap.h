@@ -8,8 +8,14 @@
 
 #include <threads.h>
 
-inline int trailing0s(uint64_t x);
-inline int leading0s(uint64_t x);
+static inline int trailing0s(uint64_t x);
+static inline int leading0s(uint64_t x);
+
+
+/*Align "size" to "alignment", alignment should be 2^n.*/
+inline size_t align(size_t size, size_t alignment){
+    return (((size)+(alignment-1)) & (~(alignment-1)));
+}
 
 // A non-blocking stack is used for storing inactive threadinfo for reusage
 typedef union{
@@ -45,44 +51,59 @@ typedef struct ThreadInfo{
     uint64_t *big_block;
 } ThreadInfo;
 
-inline uint64_t *GET_NEXT_BLOCK(uint64_t *block){
+static inline uint64_t *GET_NEXT_BLOCK(uint64_t *block){
     return (uint64_t*)(*(block+1));
 }
-inline void SET_NEXT_BLOCK(uint64_t *block, uint64_t *next){
+static inline void SET_NEXT_BLOCK(uint64_t *block, uint64_t *next){
     *(block+1) = (uint64_t)next;
 }
-inline uint64_t *GET_PREV_BLOCK(uint64_t *block){
+static inline uint64_t *GET_PREV_BLOCK(uint64_t *block){
     return (uint64_t*)(*(block+2));
 }
-inline void SET_PREV_BLOCK(uint64_t *block, uint64_t *prev){
+static inline void SET_PREV_BLOCK(uint64_t *block, uint64_t *prev){
     *(block+2) = (uint64_t)prev;
 }
-inline int GET_SLOT(uint64_t size){
-    return __builtin_popcountl(size);
+static inline int GET_SLOT(uint64_t size){
+    return trailing0s(size >> 4);
+    // return __builtin_popcountl(size);
 }
 
-// align a size to a format of 2^n-16
-inline uint64_t BUDDIFY(uint64_t size){
-    int leading_0_num = leading0s(size);
-    return ((~(INT64_MIN>>leading_0_num))<<1) & (-16L);
-}
+// // align a size to a format of 2^n-16
+// static inline uint64_t BUDDIFY(uint64_t size){
+//     int leading_0_num = leading0s(size);
+//     return ((~(INT64_MIN>>leading_0_num))<<1) & (-16L);
+// }
 
 // get a mask for index querying
-inline uint64_t GET_MASK(uint64_t buddy_size){
-    return ~(buddy_size>>4);
+static inline uint64_t GET_MASK(uint64_t size){
+    // int leading_0_num = leading0s(size-16);
+    // return (INT64_MIN>>leading_0_num)>>3;
+    int leading_0_num = leading0s(size);
+    return (INT64_MIN>>leading_0_num)>>4;
 }
 
 // get a split block size
-inline uint64_t GET_SPLIT_SIZE(uint64_t size){
+static inline uint64_t GET_SPLIT_SIZE(uint64_t size){
     return (size >> 1) & (-16L);
 }
 
-inline bool IS_BUDDY_SIZE(uint64_t size){
-    return __builtin_popcountl(size+16)==1;
+// static inline bool IS_BUDDY_SIZE(uint64_t size){
+//     return __builtin_popcountl(size+16)==1;
+// }
+
+// #define ROUND_DEGREE 2
+// return a rounded size for allocation 
+static inline uint64_t GET_ROUNDED(uint64_t size){
+    // uint64_t round_step = 1UL<<(63-ROUND_DEGREE-leading0s(size));
+    // round_step = round_step>32? round_step : 32;
+    // uint64_t partial_round = align((size&(round_step-1)), round_step);
+    // return (size&(~(round_step-1))) + partial_round;
+    uint64_t round_step = (~(INT64_MIN>>leading0s(size)))+1;
+    return align(size, round_step);
 }
 
 /*returns the number of trailing zeros of an uint64_t*/
-inline int trailing0s(uint64_t x){
+static inline int trailing0s(uint64_t x){
     if(x==0){return 64;}
     #ifdef __GNUC__
         return __builtin_ctzll(x);
@@ -97,7 +118,7 @@ inline int trailing0s(uint64_t x){
 }
 
 /*returns the number of leading zeros of an uint64_t, does not take 0 input*/
-inline int leading0s(uint64_t x){
+static inline int leading0s(uint64_t x){
     #ifdef __GNUC__
         return __builtin_clzll(x);
     #else
@@ -110,11 +131,11 @@ inline int leading0s(uint64_t x){
     #endif
 }
 
-inline void set_threadInfo_next(ThreadInfo *head, ThreadInfo *next){
+static inline void set_threadInfo_next(ThreadInfo *head, ThreadInfo *next){
     head->next = next;
 }
 
-inline void *get_threadInfo_next(ThreadInfo *threadInfo){
+static inline void *get_threadInfo_next(ThreadInfo *threadInfo){
     return threadInfo->next;
 }
 
@@ -160,7 +181,7 @@ void add_bitmap_block(uint64_t *block, size_t size);
 /*try to coalesce with forward and next block, returns the block to add*/
 uint64_t *coalesce(uint64_t *payload);
 
-/*transfer a non-buddy block to (many) buddy blocks and add*/
-void *buddify_add(uint64_t *block, size_t size);
+// /*transfer a non-buddy block to (many) buddy blocks and add*/
+// void *buddify_add(uint64_t *block, size_t size);
 
 #endif

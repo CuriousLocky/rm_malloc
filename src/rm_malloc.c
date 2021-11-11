@@ -20,8 +20,11 @@ __attribute__((optimize(0)))
 void check_valid_header(uint64_t *block){
     uint64_t size = GET_CONTENT(block);
     uint64_t id = GET_ID(block);
-    bool size_valid = (size & 15)==0;
-    bool id_valid = (id<=TEST_THREAD_LIMIT) || (id==ID_MASK) ;
+    if(id == ID_MASK){
+        return;
+    }
+    bool size_valid = (size & 31)==0;
+    bool id_valid = id<=TEST_THREAD_LIMIT;
     if(!(size_valid && id_valid)){
         raise(SIGABRT);
     }
@@ -29,6 +32,9 @@ void check_valid_header(uint64_t *block){
 
 __attribute__((optimize(0)))
 void check_valid_tail(uint64_t *tail){
+    if(GET_ID(tail)!=thread_id){
+        return;
+    }
     uint64_t *head = GET_PAYLOAD_HEAD(tail);
     uint64_t *real_tail = GET_PAYLOAD_TAIL(head, GET_CONTENT(head));
     if(tail != real_tail){
@@ -49,7 +55,7 @@ void check_front_behind_sanity(uint64_t *block){
 
 inline MallocResult __rm_malloc(size_t ori_size){
     MallocResult result;
-    size_t size = align(ori_size, 16);
+    size_t size = align(ori_size + 16, 32);
     uint64_t *victim_block = find_bitmap_victim(size);
     if(victim_block == NULL){
         result.prezeroed_flag = 1;
@@ -85,11 +91,15 @@ void rm_free(void *ptr){
     }
     uint64_t *payload = ((uint64_t*)ptr) - 1;
     if(!IS_ALLOC(payload)){
+        problem_ptr = payload;
         perror("double free\n");
         raise(SIGABRT);
         exit(-1);
     }
     #ifdef SANITY_TEST
+        if(__builtin_popcountl(GET_CONTENT(payload))!=1){
+            raise(SIGABRT);
+        }
         check_front_behind_sanity(payload);
     #endif
     uint64_t *block_to_add = coalesce(payload);
@@ -97,12 +107,6 @@ void rm_free(void *ptr){
         return;
     }
     size_t size = GET_CONTENT(block_to_add);
-    if(!IS_BUDDY_SIZE(size)){
-        problem_ptr = block_to_add;
-        perror("not buddy size\n");
-        raise(SIGABRT);
-        exit(-1);
-    }
     // printf("size = %ld\n", size);
     //block_to_add = coalesce(block_to_add);
     PACK_PAYLOAD(block_to_add, thread_id, 0, size);

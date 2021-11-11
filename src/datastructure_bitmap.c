@@ -39,7 +39,7 @@ extern thread_local size_t payload_pool_size;
 
 thread_local uint16_t thread_id;
 
-static inline void add_block_LocalTable(uint64_t *block, int slot);
+static inline void add_block_LocalTable(uint64_t *block, uint64_t size);
 
 /*go through the threadInfo_list to find an inactive one*/
 ThreadInfo *find_inactive_threadInfo(){
@@ -225,13 +225,13 @@ static inline void remove_table_head(uint64_t *block, int slot){
 // }
 
 // split a block, add the latter one into table and return the size of splited blocks
-static inline uint64_t split_block(uint64_t *block, uint64_t size){
-    uint64_t new_size = GET_SPLIT_SIZE(size);
-    uint64_t *new_block = GET_PAYLOAD_TAIL(block, new_size) + 1;
-    PACK_PAYLOAD(new_block, thread_id, 0, new_size);
-    add_bitmap_block(new_block, new_size);
-    return new_size;
-}
+// static inline uint64_t split_block(uint64_t *block, uint64_t size){
+//     uint64_t new_size = GET_SPLIT_SIZE(size);
+//     uint64_t *new_block = GET_PAYLOAD_TAIL(block, new_size) + 1;
+//     PACK_PAYLOAD(new_block, thread_id, 0, new_size);
+//     add_bitmap_block(new_block, new_size);
+//     return new_size;
+// }
 
 // look for a victim block in tables and local big block pool, requested size < (3/4)PAYLOAD_CHUNK_SIZE-16
 // the returned block is not zeroed
@@ -242,24 +242,26 @@ uint64_t *find_bitmap_victim(size_t ori_size){
     // if(ori_size >= BIG_BLOCK_MIN){
     //     return utilize_big_block(ori_size);
     // }
-    uint64_t buddy_size = BUDDIFY(ori_size);
-    uint64_t mask = GET_MASK(buddy_size);
+    // uint64_t buddy_size = BUDDIFY(ori_size);
+    uint64_t req_size = GET_ROUNDED(ori_size);
+    uint64_t mask = GET_MASK(req_size);
     int slot = trailing0s(local_table->index & mask);
     uint64_t *result = NULL;
     if(slot < 64){
         result = local_table->entries[slot];
+        uint64_t result_size = 16UL << slot;
         remove_table_head(result, slot);
-        uint64_t result_size = GET_CONTENT(result);
-        while(GET_SPLIT_SIZE(result_size) > buddy_size){
-            result_size = split_block(result, result_size);
-        }
-        PACK_PAYLOAD(result, thread_id, 1, result_size);
+        PACK_PAYLOAD(result, thread_id, 1, req_size);
+        uint64_t *new_block = GET_PAYLOAD_TAIL(result, req_size) + 1;
+        uint64_t new_block_size = result_size - req_size;
+        add_bitmap_block(new_block, new_block_size);
     }
     return result;
 }
 
 // add a block to the LocalTable indexed as table_level, requires the block to be packed in advance
-static inline void add_block_LocalTable(uint64_t *block, int slot){
+static inline void add_block_LocalTable(uint64_t *block, uint64_t size){
+    int slot = GET_SLOT(size);
     SET_PREV_BLOCK(block, NULL);
     uint64_t *old_head = local_table->entries[slot];
     SET_NEXT_BLOCK(block, old_head);
@@ -284,8 +286,19 @@ void add_bitmap_block(uint64_t *block, size_t size){
     // }
     // int table_level = GET_LOCAL_TABLE_LEVEL(size);
     // add_block_LocalTable(block, size, table_level);
-    int slot = GET_SLOT(size);
-    add_block_LocalTable(block, slot);
+    uint64_t remain_size = size;
+    uint64_t *new_block = block;
+    while(remain_size != 0){
+        uint64_t new_block_size = 1UL << (63-leading0s(remain_size));
+        PACK_PAYLOAD(new_block, thread_id, 0, new_block_size);
+        // uint64_t *added_block = coalesce(new_block);
+        // uint64_t added_block_size = GET_CONTENT(added_block);
+        // PACK_PAYLOAD(added_block, thread_id, 0, added_block_size);
+        // add_block_LocalTable(added_block, added_block_size);
+        add_block_LocalTable(new_block, new_block_size);
+        remain_size -= new_block_size;
+        new_block += new_block_size/8;
+    }
 }
 
 static inline void remove_block(uint64_t *block, int slot){
@@ -304,76 +317,45 @@ static inline void remove_block(uint64_t *block, int slot){
 }
 
 uint64_t *coalesce(uint64_t *payload){
-    return payload;
-//     uint64_t size = GET_CONTENT(payload);
-//     uint64_t *front_tail = payload-1;
-//     uint64_t *front_head = GET_PAYLOAD_HEAD(front_tail);
-//     uint64_t *behind_head = GET_PAYLOAD_TAIL(payload, size) + 1;
-//     // check ALLOC first to avoid segfault on chunk edges
-//     bool merge_front = (!IS_ALLOC(front_tail)) && (GET_ID(front_tail)==thread_id);
-//     bool merge_behind = (!IS_ALLOC(behind_head)) && (GET_ID(behind_head)==thread_id);
-//     uint64_t *block_to_add = payload;
-//     if(merge_front && merge_behind){
-//         uint64_t front_size = GET_CONTENT(front_head);
-//         uint64_t behind_size = GET_CONTENT(behind_head);
-//         int front_level = GET_LOCAL_TABLE_LEVEL(front_size);
-//         int behind_level = GET_LOCAL_TABLE_LEVEL(behind_size);
-//         int front_slot = GET_LOCAL_TABLE_SLOT(front_size, front_level);
-//         int behind_slot = GET_LOCAL_TABLE_SLOT(behind_size, behind_level);
-//         uint64_t front_step = GET_LOCAL_TABLE_STEP(front_level);
-//         uint64_t new_block_size = front_size + behind_size + size + 32;
-//         uint64_t size_diff = new_block_size ^ front_size;
-//         PACK_PAYLOAD(front_head, thread_id, 0, new_block_size);
-//         remove_block(behind_head, behind_level, behind_slot);
-//         if(size_diff < front_step){
-//             // no change to the table structure
-//             // nothing to add to table
-//             block_to_add = NULL;
-//         }else{
-//             // remove front block from table structure
-//             remove_block(front_head, front_level, front_slot);
-//             block_to_add = front_head;
-//         }
-//     }else if(merge_front){
-//         uint64_t front_size = GET_CONTENT(front_head);
-//         int front_level = GET_LOCAL_TABLE_LEVEL(front_size);
-//         int front_slot = GET_LOCAL_TABLE_SLOT(front_size, front_level);
-//         uint64_t front_step = GET_LOCAL_TABLE_STEP(front_level);
-//         uint64_t new_block_size = front_size + size + 16;
-//         uint64_t size_diff = new_block_size ^ front_size;
-//         PACK_PAYLOAD(front_head, thread_id, 0, new_block_size);
-//         if(size_diff < front_step){
-//             // no change to the table structure
-//             // nothing to add to table
-//             block_to_add = NULL;
-//         }else{
-//             // remove front block from table structure
-//             remove_block(front_head, front_level, front_slot);
-//             block_to_add = front_head;
-//         }
-//     }else if(merge_behind){
-//         // block_to_add is still payload
-//         uint64_t behind_size = GET_CONTENT(behind_head);
-//         int behind_level = GET_LOCAL_TABLE_LEVEL(behind_size);
-//         int behind_slot = GET_LOCAL_TABLE_SLOT(behind_size, behind_level);
-//         uint64_t new_block_size = behind_size + size + 16;
-//         PACK_PAYLOAD(payload, thread_id, 0, new_block_size);
-//         // can't avoid table structure change
-//         remove_block(behind_head, behind_level, behind_slot);
-//     }
-//     return block_to_add;
+    // return payload;
+    uint64_t size = GET_CONTENT(payload);
+    uint64_t *front_tail = payload-1;
+    uint64_t *front_head = GET_PAYLOAD_HEAD(front_tail);
+    
+    uint64_t *block_to_add = payload;
+    uint64_t block_size = size;
+    // check ALLOC first to avoid segfault on chunk edges
+    bool merge_front = (!IS_ALLOC(front_tail)) && (GET_ID(front_tail)==thread_id) && (GET_CONTENT(front_head)==block_size);
+    if(merge_front){
+        int front_slot = GET_SLOT(GET_CONTENT(front_head));
+        remove_block(front_head, front_slot);
+        block_to_add = front_head;
+        block_size = block_size << 1;
+    }
+    uint64_t *behind_head = GET_PAYLOAD_TAIL(payload, size) + 1;
+    bool merge_behind = (!IS_ALLOC(behind_head)) && (GET_ID(behind_head)==thread_id) && (GET_CONTENT(behind_head)==block_size);
+    if(merge_behind){
+        int behind_slot = GET_SLOT(GET_CONTENT(behind_head));
+        remove_block(behind_head, behind_slot);
+        block_size = block_size << 1;
+    }
+    if(merge_front || merge_behind){
+        // complete packing done in free()
+        PACK_PAYLOAD(block_to_add, thread_id, 0, block_size);
+    }
+    return block_to_add;
 }
 
-void *buddify_add(uint64_t *block, size_t size){
-    uint64_t total_size = size + 16;
-    uint64_t remain_size = total_size;
-    uint64_t *new_block = block;
-    while(remain_size != 0){
-        uint64_t new_block_total_size = 1 << trailing0s(remain_size);
-        uint64_t new_block_size = new_block_total_size - 16;
-        PACK_PAYLOAD(new_block, thread_id, 0, new_block_size);
-        add_bitmap_block(new_block, new_block_size);
-        remain_size -= new_block_total_size;
-        new_block += new_block_total_size/8;
-    }
-}
+// void *buddify_add(uint64_t *block, size_t size){
+//     uint64_t total_size = size + 16;
+//     uint64_t remain_size = total_size;
+//     uint64_t *new_block = block;
+//     while(remain_size != 0){
+//         uint64_t new_block_total_size = 1 << trailing0s(remain_size);
+//         uint64_t new_block_size = new_block_total_size - 16;
+//         PACK_PAYLOAD(new_block, thread_id, 0, new_block_size);
+//         add_bitmap_block(new_block, new_block_size);
+//         remain_size -= new_block_total_size;
+//         new_block += new_block_total_size/8;
+//     }
+// }
