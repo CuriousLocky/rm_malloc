@@ -3,6 +3,7 @@
 
 #include <inttypes.h>
 #include <stddef.h>
+#include <x86intrin.h>
 
 #define FREE_MASK       0xfffffffffffffffeUL
 #define ALLOC_MASK      (~FREE_MASK)
@@ -45,7 +46,8 @@ static inline int IS_ALLOC(uint64_t *payload_head){
     return (*payload_head)&1;
 }
 static inline int GET_ID(uint64_t *payload){
-    return ((*payload)>>48)&ID_MASK;
+    // return ((*payload)>>48)&ID_MASK;
+    return _bextr_u64(*payload, 48, 16);
 }
 
 void *create_payload_block(size_t size);

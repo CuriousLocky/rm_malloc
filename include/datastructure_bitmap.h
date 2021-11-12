@@ -7,6 +7,8 @@
 #include <limits.h>
 
 #include <threads.h>
+#include <x86intrin.h>
+#include <immintrin.h>
 
 static inline int trailing0s(uint64_t x);
 static inline int leading0s(uint64_t x);
@@ -29,8 +31,8 @@ typedef union{
 /*each bit of index is for indicating whether entries[i]==NULL*/
 typedef union{
     uint64_t index;
-    // entries[0] is never used
-    uint64_t *entries[64];
+    // entries[0~4] is never used
+    uint64_t *entries[48];
 } LocalTable;
 
 /*works like LocalTable but shared, so entries organized by non-blocking stacks*/
@@ -64,41 +66,23 @@ static inline void SET_PREV_BLOCK(uint64_t *block, uint64_t *prev){
     *(block+2) = (uint64_t)prev;
 }
 static inline int GET_SLOT(uint64_t size){
-    return trailing0s(size >> 4);
+    return trailing0s(size);
     // return __builtin_popcountl(size);
 }
+static inline uint64_t GET_SLOT_SIZE(int slot){
+    return 1UL << slot;
+}
 
-// // align a size to a format of 2^n-16
-// static inline uint64_t BUDDIFY(uint64_t size){
-//     int leading_0_num = leading0s(size);
-//     return ((~(INT64_MIN>>leading_0_num))<<1) & (-16L);
-// }
-
-// get a mask for index querying
+// get a mask for index querying, size must be 2^n
 static inline uint64_t GET_MASK(uint64_t size){
-    // int leading_0_num = leading0s(size-16);
-    // return (INT64_MIN>>leading_0_num)>>3;
-    int leading_0_num = leading0s(size);
-    return (INT64_MIN>>leading_0_num)>>4;
+    return ~(size-1);
 }
-
-// get a split block size
-static inline uint64_t GET_SPLIT_SIZE(uint64_t size){
-    return (size >> 1) & (-16L);
-}
-
-// static inline bool IS_BUDDY_SIZE(uint64_t size){
-//     return __builtin_popcountl(size+16)==1;
-// }
 
 // #define ROUND_DEGREE 2
 // return a rounded size for allocation 
 static inline uint64_t GET_ROUNDED(uint64_t size){
-    // uint64_t round_step = 1UL<<(63-ROUND_DEGREE-leading0s(size));
-    // round_step = round_step>32? round_step : 32;
-    // uint64_t partial_round = align((size&(round_step-1)), round_step);
-    // return (size&(~(round_step-1))) + partial_round;
     uint64_t round_step = (~(INT64_MIN>>leading0s(size)))+1;
+    
     return align(size, round_step);
 }
 

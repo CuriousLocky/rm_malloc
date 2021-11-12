@@ -249,7 +249,7 @@ uint64_t *find_bitmap_victim(size_t ori_size){
     uint64_t *result = NULL;
     if(slot < 64){
         result = local_table->entries[slot];
-        uint64_t result_size = 16UL << slot;
+        uint64_t result_size = GET_SLOT_SIZE(slot);
         remove_table_head(result, slot);
         PACK_PAYLOAD(result, thread_id, 1, req_size);
         uint64_t *new_block = GET_PAYLOAD_TAIL(result, req_size) + 1;
@@ -289,7 +289,8 @@ void add_bitmap_block(uint64_t *block, size_t size){
     uint64_t remain_size = size;
     uint64_t *new_block = block;
     while(remain_size != 0){
-        uint64_t new_block_size = 1UL << (63-leading0s(remain_size));
+        // uint64_t new_block_size = 1UL << (63-leading0s(remain_size));
+        uint64_t new_block_size = __blsi_u64(remain_size);
         PACK_PAYLOAD(new_block, thread_id, 0, new_block_size);
         // uint64_t *added_block = coalesce(new_block);
         // uint64_t added_block_size = GET_CONTENT(added_block);
@@ -333,7 +334,9 @@ uint64_t *coalesce(uint64_t *payload){
         block_size = block_size << 1;
     }
     uint64_t *behind_head = GET_PAYLOAD_TAIL(payload, size) + 1;
-    bool merge_behind = (!IS_ALLOC(behind_head)) && (GET_ID(behind_head)==thread_id) && (GET_CONTENT(behind_head)==block_size);
+    // bool merge_behind = (!IS_ALLOC(behind_head)) && (GET_ID(behind_head)==thread_id) && (GET_CONTENT(behind_head)==block_size);
+    uint64_t estimated_behind_head = ((uint64_t)thread_id<<48)|block_size;
+    bool merge_behind = (*behind_head)==estimated_behind_head;
     if(merge_behind){
         int behind_slot = GET_SLOT(GET_CONTENT(behind_head));
         remove_block(behind_head, behind_slot);
