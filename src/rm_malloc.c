@@ -118,11 +118,11 @@ void rm_free(void *ptr){
     PACK_PAYLOAD(block_to_add, thread_id, 0, size);
     add_bitmap_block(block_to_add, size);
 
-    uint64_t current_dept_stack_size = local_thread_info->dept_stack_size;
-    __atomic_fetch_sub(&(local_thread_info->dept_stack_size), current_dept_stack_size, __ATOMIC_RELAXED);
-    for(int i = 0; i < current_dept_stack_size; i++){
-        uint64_t *dept_block = pop_nonblocking_stack(local_thread_info->dept_stack, GET_NEXT_BLOCK);
-        uint64_t *block_to_add = coalesce(dept_block);
+    uint64_t current_debt_stack_size = local_thread_info->debt_stack_size;
+    __atomic_fetch_sub(&(local_thread_info->debt_stack_size), current_debt_stack_size, __ATOMIC_RELAXED);
+    for(int i = 0; i < current_debt_stack_size; i++){
+        uint64_t *debt_block = pop_nonblocking_stack(local_thread_info->debt_stack, GET_NEXT_BLOCK);
+        uint64_t *block_to_add = coalesce(debt_block);
         if(block_to_add == NULL){
             return;
         }

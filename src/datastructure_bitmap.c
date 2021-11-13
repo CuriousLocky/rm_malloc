@@ -357,8 +357,8 @@ uint64_t *coalesce(uint64_t *payload){
 
 void remote_free(uint64_t *remote_block, int block_id){
     ThreadInfo *target_threadInfo = threadInfo_array[block_id];
-    push_nonblocking_stack(remote_block, target_threadInfo->dept_stack, SET_NEXT_BLOCK);
-    __atomic_fetch_add(&(target_threadInfo->dept_stack_size), 1, __ATOMIC_RELAXED);
+    push_nonblocking_stack(remote_block, target_threadInfo->debt_stack, SET_NEXT_BLOCK);
+    __atomic_fetch_add(&(target_threadInfo->debt_stack_size), 1, __ATOMIC_RELAXED);
 }
 
 // void *buddify_add(uint64_t *block, size_t size){

@@ -51,8 +51,8 @@ typedef struct ThreadInfo{
     void *payload_pool;
     size_t payload_pool_size;
     uint64_t *big_block;
-    NonBlockingStackBlock dept_stack;
-    uint64_t dept_stack_size;
+    NonBlockingStackBlock debt_stack;
+    uint64_t debt_stack_size;
 } ThreadInfo;
 
 static inline uint64_t *GET_NEXT_BLOCK(uint64_t *block){
