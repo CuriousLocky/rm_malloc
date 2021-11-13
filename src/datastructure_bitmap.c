@@ -39,6 +39,9 @@ extern thread_local size_t payload_pool_size;
 
 thread_local uint16_t thread_id;
 
+#define THREADINFO_ARRAY_SIZE 4096
+ThreadInfo *threadInfo_array[THREADINFO_ARRAY_SIZE];
+
 static inline void add_block_LocalTable(uint64_t *block, uint64_t size);
 
 /*go through the threadInfo_list to find an inactive one*/
@@ -103,6 +106,8 @@ ThreadInfo *create_new_threadInfo(){
     new_threadInfo->active = 0;
     #endif
 
+    threadInfo_array[id] = new_threadInfo;
+
     return new_threadInfo;
 }
 
@@ -133,6 +138,7 @@ void set_threadInfo_inactive(void *arg){
 
     local_thread_info = NULL;
 
+    thread_id = THREADINFO_ARRAY_SIZE;
 }
 
 /*
@@ -347,6 +353,12 @@ uint64_t *coalesce(uint64_t *payload){
         PACK_PAYLOAD(block_to_add, thread_id, 0, block_size);
     }
     return block_to_add;
+}
+
+void remote_free(uint64_t *remote_block, int block_id){
+    ThreadInfo *target_threadInfo = threadInfo_array[block_id];
+    push_nonblocking_stack(remote_block, target_threadInfo->dept_stack, SET_NEXT_BLOCK);
+    __atomic_fetch_add(&(target_threadInfo->dept_stack_size), 1, __ATOMIC_RELAXED);
 }
 
 // void *buddify_add(uint64_t *block, size_t size){

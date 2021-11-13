@@ -51,6 +51,8 @@ typedef struct ThreadInfo{
     void *payload_pool;
     size_t payload_pool_size;
     uint64_t *big_block;
+    NonBlockingStackBlock dept_stack;
+    uint64_t dept_stack_size;
 } ThreadInfo;
 
 static inline uint64_t *GET_NEXT_BLOCK(uint64_t *block){
@@ -167,5 +169,8 @@ uint64_t *coalesce(uint64_t *payload);
 
 // /*transfer a non-buddy block to (many) buddy blocks and add*/
 // void *buddify_add(uint64_t *block, size_t size);
+
+/*free a block belonging to other thread*/
+void remote_free(uint64_t *block, int block_id);
 
 #endif

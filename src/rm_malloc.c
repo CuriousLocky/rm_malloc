@@ -8,6 +8,7 @@
 #include "mempool.h"
 
 extern thread_local uint16_t thread_id;
+extern thread_local ThreadInfo *local_thread_info;
 
 typedef struct{
     int prezeroed_flag; // to indicate whether the block is pre-zeroed
@@ -96,6 +97,11 @@ void rm_free(void *ptr){
         raise(SIGABRT);
         exit(-1);
     }
+    int block_id = GET_ID(payload);
+    if(block_id != thread_id){
+        remote_free(payload, block_id);
+        return;
+    }
     #ifdef SANITY_TEST
         if(__builtin_popcountl(GET_CONTENT(payload))!=1){
             raise(SIGABRT);
@@ -111,6 +117,21 @@ void rm_free(void *ptr){
     //block_to_add = coalesce(block_to_add);
     PACK_PAYLOAD(block_to_add, thread_id, 0, size);
     add_bitmap_block(block_to_add, size);
+
+    uint64_t current_dept_stack_size = local_thread_info->dept_stack_size;
+    __atomic_fetch_sub(&(local_thread_info->dept_stack_size), current_dept_stack_size, __ATOMIC_RELAXED);
+    for(int i = 0; i < current_dept_stack_size; i++){
+        uint64_t *dept_block = pop_nonblocking_stack(local_thread_info->dept_stack, GET_NEXT_BLOCK);
+        uint64_t *block_to_add = coalesce(dept_block);
+        if(block_to_add == NULL){
+            return;
+        }
+        size_t size = GET_CONTENT(block_to_add);
+        // printf("size = %ld\n", size);
+        //block_to_add = coalesce(block_to_add);
+        PACK_PAYLOAD(block_to_add, thread_id, 0, size);
+        add_bitmap_block(block_to_add, size);
+    }
 }
 
 __attribute__((visibility("default")))
