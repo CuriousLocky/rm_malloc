@@ -27,10 +27,8 @@ void *create_payload_block(size_t size){
     #ifdef __NOISY_DEBUG
     write(1, "into create_payload_block\n", sizeof("into create_payload_block"));
     #endif
-    // size_t buddy_size = BUDDIFY(size);
     size_t payload_size = GET_ROUNDED(size);
     if(payload_pool_size<payload_size){
-        // buddify_add(payload_pool, payload_pool_size-16);
         add_bitmap_block(payload_pool, payload_pool_size);
         payload_init(payload_size);
     }

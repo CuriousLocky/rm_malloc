@@ -46,7 +46,6 @@ static inline int IS_ALLOC(uint64_t *payload_head){
     return (*payload_head)&1;
 }
 static inline int GET_ID(uint64_t *payload){
-    // return ((*payload)>>48)&ID_MASK;
     return _bextr_u64(*payload, 48, 16);
 }
 

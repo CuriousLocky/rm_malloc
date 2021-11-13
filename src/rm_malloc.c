@@ -85,7 +85,6 @@ uint64_t *problem_ptr;
 __attribute__((visibility("default")))
 void rm_free(void *ptr){
     if(ptr==NULL){return;}
-    // printf("into rm_free\n");
     if((uint64_t)ptr&15!=0){
         perror("not aligned\n");
         exit(-1);
@@ -113,8 +112,6 @@ void rm_free(void *ptr){
         return;
     }
     size_t size = GET_CONTENT(block_to_add);
-    // printf("size = %ld\n", size);
-    //block_to_add = coalesce(block_to_add);
     PACK_PAYLOAD(block_to_add, thread_id, 0, size);
     add_bitmap_block(block_to_add, size);
 
@@ -127,8 +124,6 @@ void rm_free(void *ptr){
             return;
         }
         size_t size = GET_CONTENT(block_to_add);
-        // printf("size = %ld\n", size);
-        //block_to_add = coalesce(block_to_add);
         PACK_PAYLOAD(block_to_add, thread_id, 0, size);
         add_bitmap_block(block_to_add, size);
     }
@@ -159,7 +154,6 @@ __attribute__((visibility("default")))
 void *realloc(void *ptr, size_t size) __attribute__((weak, alias("rm_realloc")));
 
 void* rm_calloc(size_t num, size_t size){
-    // write(1, "calloc\n", sizeof("calloc"));
     size_t total_size = num*size;
     if(total_size == 0) {return NULL;}
     MallocResult resultPack = __rm_malloc(total_size);

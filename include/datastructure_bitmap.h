@@ -50,7 +50,6 @@ typedef struct ThreadInfo{
     struct ThreadInfo *next;
     void *payload_pool;
     size_t payload_pool_size;
-    // uint64_t *big_block;
     NonBlockingStackBlock debt_stack;
     uint64_t debt_stack_size;
 } ThreadInfo;
@@ -69,7 +68,6 @@ static inline void SET_PREV_BLOCK(uint64_t *block, uint64_t *prev){
 }
 static inline int GET_SLOT(uint64_t size){
     return trailing0s(size);
-    // return __builtin_popcountl(size);
 }
 static inline uint64_t GET_SLOT_SIZE(int slot){
     return 1UL << slot;
@@ -80,11 +78,9 @@ static inline uint64_t GET_MASK(uint64_t size){
     return ~(size-1);
 }
 
-// #define ROUND_DEGREE 2
 // return a rounded size for allocation 
 static inline uint64_t GET_ROUNDED(uint64_t size){
     uint64_t round_step = (~(INT64_MIN>>leading0s(size)))+1;
-    
     return align(size, round_step);
 }
 
@@ -147,9 +143,6 @@ void add_bitmap_block(uint64_t *block, size_t size);
 
 /*try to coalesce with forward and next block, returns the block to add*/
 uint64_t *coalesce(uint64_t *payload);
-
-// /*transfer a non-buddy block to (many) buddy blocks and add*/
-// void *buddify_add(uint64_t *block, size_t size);
 
 /*free a block belonging to other thread*/
 void remote_free(uint64_t *block, int block_id);
