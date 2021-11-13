@@ -260,9 +260,11 @@ uint64_t *coalesce(uint64_t *payload){
     
     uint64_t *block_to_add = payload;
     uint64_t block_size = size;
-    // check ALLOC first to avoid segfault on chunk edges
-    bool merge_front = (!IS_ALLOC(front_tail)) && (GET_ID(front_tail)==thread_id) && (GET_CONTENT(front_head)==block_size);
+    uint64_t *estimated_front_head = front_tail - size/8 + 1;
+    uint64_t estimated_front_tail = ((uint64_t)thread_id<<48)|(uint64_t)estimated_front_head;
+    bool merge_front = estimated_front_tail == *front_tail;
     if(merge_front){
+        uint64_t *front_head = estimated_front_head;
         int front_slot = GET_SLOT(GET_CONTENT(front_head));
         remove_block(front_head, front_slot);
         block_to_add = front_head;
@@ -278,7 +280,7 @@ uint64_t *coalesce(uint64_t *payload){
     }
     if(merge_front || merge_behind){
         // complete packing done in free()
-        PACK_PAYLOAD(block_to_add, thread_id, 0, block_size);
+        *block_to_add = block_size;
     }
     return block_to_add;
 }
