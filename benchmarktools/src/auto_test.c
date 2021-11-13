@@ -254,10 +254,12 @@ int main(int argc, char **argv){
     chdir(remove_bin(realpath(argv[0], NULL)));
     pthread_t recorder;
     if(recordFlag){
+        printf("memory consumption started\n");
         pthread_create(&recorder, NULL, record_mem, recordFile);
     }
     struct timeval start;
     if(timeFlag){
+        printf("timing started\n");
         gettimeofday(&start, NULL);
     }
     pthread_t thread_pool[test_thread];
