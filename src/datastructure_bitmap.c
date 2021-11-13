@@ -127,7 +127,7 @@ void set_threadInfo_inactive(void *arg){
     #endif
     local_thread_info->payload_pool = payload_pool;
     local_thread_info->payload_pool_size = payload_pool_size;
-    local_thread_info->big_block = local_big_block;
+    // local_thread_info->big_block = local_big_block;
 
     #ifdef __RACE_TEST
     __sync_fetch_and_sub(&(local_thread_info->active), 1);
@@ -168,7 +168,7 @@ __attribute__ ((constructor)) void thread_bitmap_init(){
     thread_id = inactive_threadInfo->thread_id;
     payload_pool = inactive_threadInfo->payload_pool;
     payload_pool_size = inactive_threadInfo->payload_pool_size;
-    local_big_block = inactive_threadInfo->big_block;
+    // local_big_block = inactive_threadInfo->big_block;
 
     #ifdef __RACE_TEST
     if(__sync_fetch_and_add(&(local_thread_info->active), 1) > 0){

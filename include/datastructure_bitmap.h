@@ -50,7 +50,7 @@ typedef struct ThreadInfo{
     struct ThreadInfo *next;
     void *payload_pool;
     size_t payload_pool_size;
-    uint64_t *big_block;
+    // uint64_t *big_block;
     NonBlockingStackBlock debt_stack;
     uint64_t debt_stack_size;
 } ThreadInfo;
@@ -90,31 +90,12 @@ static inline uint64_t GET_ROUNDED(uint64_t size){
 
 /*returns the number of trailing zeros of an uint64_t*/
 static inline int trailing0s(uint64_t x){
-    if(x==0){return 64;}
-    #ifdef __GNUC__
-        return __builtin_ctzll(x);
-    #else
-        int result = 0;
-        while(!(x&1)){
-            x = x >> 1;
-            result ++;
-        }
-        return result;
-    #endif
+    return _tzcnt_u64(x);
 }
 
 /*returns the number of leading zeros of an uint64_t, does not take 0 input*/
 static inline int leading0s(uint64_t x){
-    #ifdef __GNUC__
-        return __builtin_clzll(x);
-    #else
-        int result = 0;
-        while(!(x&(1<<63))){
-            x = x << 1;
-            result ++;
-        }
-        return result;
-    #endif
+    return _lzcnt_u64(x);
 }
 
 static inline void set_threadInfo_next(ThreadInfo *head, ThreadInfo *next){
