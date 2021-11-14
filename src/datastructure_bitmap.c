@@ -47,10 +47,9 @@ ThreadInfo *find_inactive_threadInfo(){
     return pop_nonblocking_stack(inactive_threadInfo_stack, get_threadInfo_next);
 }
 
-/*initialize the threadInfo_pool with sufficient space so that it will never need to expand*/
+/*initialize the threadInfo_pool*/
 void *threadInfo_pool_init(){
     uint8_t init_id = __atomic_fetch_add(&threadInfo_pool_init_flag, 1, __ATOMIC_RELAXED);
-    // init_id is used to create a spinlock so that threadInfo_pool is init only once
     if(init_id == 0){
         threadInfo_pool = meta_chunk_req(META_CHUNK_SIZE);
         threadInfo_pool_usage = 0;
@@ -62,7 +61,7 @@ void *threadInfo_pool_init(){
     threadInfo_pool_init_flag = 0;
 }
 
-/*create a new threadInfo for this thread, with local_level_0_table initialized*/
+/*create a new threadInfo for this thread*/
 ThreadInfo *create_new_threadInfo(){
     #ifdef __NOISY_DEBUG
     write(1, "create_new_threadInfo\n", sizeof("create_new_threadInfo"));
@@ -175,6 +174,7 @@ __attribute__ ((constructor)) void thread_bitmap_init(){
     return;
 }
 
+/*remove a table's head, and properly deal with next and prev for all blocks involved*/
 static inline void remove_table_head(uint64_t *block, int slot){
     uint64_t *new_list_head = GET_NEXT_BLOCK(block);
     local_table->entries[slot] = new_list_head;
@@ -237,8 +237,8 @@ void add_bitmap_block(uint64_t *block, size_t size){
     }
 }
 
+// remove a block from table structure
 static inline void remove_block(uint64_t *block, int slot){
-    // remove a block from table structure
     uint64_t *prev = GET_PREV_BLOCK(block);
     uint64_t *next = GET_NEXT_BLOCK(block);
     if(prev != NULL){
@@ -253,7 +253,6 @@ static inline void remove_block(uint64_t *block, int slot){
 }
 
 uint64_t *coalesce(uint64_t *payload){
-    // return payload;
     uint64_t size = GET_CONTENT(payload);
     uint64_t *front_tail = payload-1;
     uint64_t *front_head = GET_PAYLOAD_HEAD(front_tail);
@@ -285,6 +284,7 @@ uint64_t *coalesce(uint64_t *payload){
     return block_to_add;
 }
 
+// attach a block to the debt stack in the owner's threadinfo
 void remote_free(uint64_t *remote_block, int block_id){
     ThreadInfo *target_threadInfo = threadInfo_array[block_id];
     push_nonblocking_stack(remote_block, target_threadInfo->debt_stack, SET_NEXT_BLOCK);

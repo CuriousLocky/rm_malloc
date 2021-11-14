@@ -8,11 +8,9 @@
 
 #include <threads.h>
 #include <x86intrin.h>
-#include <immintrin.h>
 
 static inline int trailing0s(uint64_t x);
 static inline int leading0s(uint64_t x);
-
 
 /*Align "size" to "alignment", alignment should be 2^n.*/
 inline size_t align(size_t size, size_t alignment){
@@ -34,12 +32,6 @@ typedef union{
     // entries[0~4] is never used
     uint64_t *entries[48];
 } LocalTable;
-
-/*works like LocalTable but shared, so entries organized by non-blocking stacks*/
-typedef struct{
-    uint64_t index;
-    NonBlockingStackBlock entryStacks[63];
-} SharedTable;
 
 typedef struct ThreadInfo{
     #ifdef __RACE_TEST
@@ -89,20 +81,22 @@ static inline int trailing0s(uint64_t x){
     return _tzcnt_u64(x);
 }
 
-/*returns the number of leading zeros of an uint64_t, does not take 0 input*/
+/*returns the number of leading zeros of an uint64_t*/
 static inline int leading0s(uint64_t x){
     return _lzcnt_u64(x);
 }
 
+/*set a threadInfo to be the next of the other, for non-blocking stack usage*/
 static inline void set_threadInfo_next(ThreadInfo *head, ThreadInfo *next){
     head->next = next;
 }
 
+/*get the next threadInfo linked, for non-blocking stack usage*/
 static inline void *get_threadInfo_next(ThreadInfo *threadInfo){
     return threadInfo->next;
 }
 
-/*returns the top of a nonblocking stack*/
+/*a pseudo function, returns the top of a nonblocking stack, stack must be direct reference*/
 #define pop_nonblocking_stack(stack, get_next)                                                              \
 ({                                                                                                          \
     NonBlockingStackBlock old_block;                                                                        \
@@ -118,7 +112,7 @@ static inline void *get_threadInfo_next(ThreadInfo *threadInfo){
     old_block.block_struct.ptr;                                                                             \
 })
 
-/*a pseudo function to push a ptr to a nonblocking stack*/
+/*a pseudo function to push a ptr to a nonblocking stack, stack must be direct reference*/
 #define push_nonblocking_stack(pushed_ptr, stack, set_next){                                                \
     NonBlockingStackBlock new_block;                                                                        \
     NonBlockingStackBlock old_block;                                                                        \
@@ -133,12 +127,10 @@ static inline void *get_threadInfo_next(ThreadInfo *threadInfo){
 /*initialize the bitmap structure, should be called once per thread*/
 void thread_bitmap_init();
 
-/*find a victim block that can hold size bytes, return NULL if no block
-in both the global freelist and thread local freelist satisfies*/
+/*find a victim block that can hold size bytes, return NULL if no block in the table satisfies*/
 uint64_t *find_bitmap_victim(size_t size);
 
-/*insert a block into freelist. will insert to global freelist if not
-in use, thread local freelist otherwise.*/
+/*insert a block into the table, the block will be splitted to 2^n size sub-blocks*/
 void add_bitmap_block(uint64_t *block, size_t size);
 
 /*try to coalesce with forward and next block, returns the block to add*/

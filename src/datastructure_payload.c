@@ -11,6 +11,8 @@ thread_local size_t payload_pool_size = 0;
 
 extern thread_local uint16_t thread_id;
 
+/*initiate a new payload pool according to the requested size. total wasted space is 32 bytes, in which 16
+bytes are the chunk header and tails and 16 bytes are for alignment requirement*/
 void payload_init(size_t payload_size){
     #ifdef __NOISY_DEBUG
     write(1, "into payload_init\n", sizeof("into payload_init"));
@@ -23,6 +25,8 @@ void payload_init(size_t payload_size){
     payload_pool_size = new_pool_size;
 }
 
+/*cut the rounded size from payload_pool, if the size exceed payload pool size, request a new payload pool
+from the mempool and repeat, the remain size will be added to the table*/
 void *create_payload_block(size_t size){
     #ifdef __NOISY_DEBUG
     write(1, "into create_payload_block\n", sizeof("into create_payload_block"));
