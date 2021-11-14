@@ -38,6 +38,7 @@ void *create_payload_block(size_t size){
     if(payload_size >= PAYLOAD_CHUNK_SIZE){
         // huge block is given
         // 16 bytes are for alignment requirement, no need to align again since rounded size
+        payload_size = align(size, PAYLOAD_CHUNK_SIZE);
         uint64_t *chunk_head = payload_chunk_req(payload_size);
         PACK_PAYLOAD_HEAD(chunk_head + 1, 1, ID_MASK, payload_size);
         return chunk_head + 2;
