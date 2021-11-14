@@ -54,9 +54,19 @@ void check_front_behind_sanity(uint64_t *block){
 }
 #endif
 
-inline MallocResult __rm_malloc(size_t ori_size){
+static inline MallocResult __rm_malloc(size_t ori_size){
     MallocResult result;
     size_t size = align(ori_size + 16, 32);
+    if(size >= PAYLOAD_CHUNK_SIZE){
+        // huge block is given
+        // 16 bytes are for alignment requirement
+        size = align(ori_size + 16, PAYLOAD_CHUNK_SIZE);
+        uint64_t *chunk_head = payload_chunk_req(size);
+        PACK_PAYLOAD_HEAD(chunk_head + 1, 1, ID_MASK, size);
+        result.prezeroed_flag = 1;
+        result.ptr = chunk_head + 2;
+        return result;
+    }
     uint64_t *victim_block = find_bitmap_victim(size);
     if(victim_block == NULL){
         result.prezeroed_flag = 1;
@@ -97,6 +107,12 @@ void rm_free(void *ptr){
         exit(-1);
     }
     int block_id = GET_ID(payload);
+    if(block_id == ID_MASK){
+        // huge block
+        uint64_t size = GET_CONTENT(payload);
+        payload_chunk_rel(payload-1, size);
+        return;
+    }
     if(block_id != thread_id){
         remote_free(payload, block_id);
         return;
