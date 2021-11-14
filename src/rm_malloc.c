@@ -119,7 +119,7 @@ void rm_free(void *ptr){
     }
     size_t size = GET_CONTENT(block_to_add);
     PACK_PAYLOAD(block_to_add, thread_id, 0, size);
-    add_bitmap_block(block_to_add, size);
+    add_block_LocalTable(block_to_add, size);
 
     uint64_t current_debt_stack_size = local_thread_info->debt_stack_size;
     __atomic_fetch_sub(&(local_thread_info->debt_stack_size), current_debt_stack_size, __ATOMIC_RELAXED);
@@ -131,7 +131,7 @@ void rm_free(void *ptr){
         }
         size_t size = GET_CONTENT(block_to_add);
         PACK_PAYLOAD(block_to_add, thread_id, 0, size);
-        add_bitmap_block(block_to_add, size);
+        add_block_LocalTable(block_to_add, size);
     }
 }
 

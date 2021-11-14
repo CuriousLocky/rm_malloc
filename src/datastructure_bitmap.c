@@ -39,8 +39,6 @@ thread_local uint16_t thread_id;
 #define THREADINFO_ARRAY_SIZE 4096
 ThreadInfo *threadInfo_array[THREADINFO_ARRAY_SIZE];
 
-static inline void add_block_LocalTable(uint64_t *block, uint64_t size);
-
 /*go through the threadInfo_list to find an inactive one*/
 ThreadInfo *find_inactive_threadInfo(){
     // pop the current inactive threadinfo from the stack
@@ -208,7 +206,7 @@ uint64_t *find_bitmap_victim(size_t ori_size){
 }
 
 // add a block to the LocalTable indexed as table_level, requires the block to be packed in advance
-static inline void add_block_LocalTable(uint64_t *block, uint64_t size){
+void add_block_LocalTable(uint64_t *block, uint64_t size){
     int slot = GET_SLOT(size);
     SET_PREV_BLOCK(block, NULL);
     uint64_t *old_head = local_table->entries[slot];

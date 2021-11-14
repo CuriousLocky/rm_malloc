@@ -133,6 +133,9 @@ uint64_t *find_bitmap_victim(size_t size);
 /*insert a block into the table, the block will be splitted to 2^n size sub-blocks*/
 void add_bitmap_block(uint64_t *block, size_t size);
 
+// add a block to the LocalTable indexed as table_level, requires the block to be packed in advance
+void add_block_LocalTable(uint64_t *block, uint64_t size);
+
 /*try to coalesce with forward and next block, returns the block to add*/
 uint64_t *coalesce(uint64_t *payload);
 
