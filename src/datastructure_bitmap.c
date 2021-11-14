@@ -264,7 +264,7 @@ uint64_t *coalesce(uint64_t *payload){
     bool merge_front = estimated_front_tail == *front_tail;
     if(merge_front){
         uint64_t *front_head = estimated_front_head;
-        int front_slot = GET_SLOT(GET_CONTENT(front_head));
+        int front_slot = GET_SLOT(block_size);
         remove_block(front_head, front_slot);
         block_to_add = front_head;
         block_size = block_size << 1;
@@ -273,7 +273,7 @@ uint64_t *coalesce(uint64_t *payload){
     uint64_t estimated_behind_head = ((uint64_t)thread_id<<48)|block_size;
     bool merge_behind = (*behind_head)==estimated_behind_head;
     if(merge_behind){
-        int behind_slot = GET_SLOT(GET_CONTENT(behind_head));
+        int behind_slot = GET_SLOT(block_size);
         remove_block(behind_head, behind_slot);
         block_size = block_size << 1;
     }
