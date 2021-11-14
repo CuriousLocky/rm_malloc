@@ -27,19 +27,9 @@ static inline uint64_t *GET_PAYLOAD_TAIL(uint64_t *payload_head, size_t size){
     return (uint64_t*)((char*)payload_head + size - 8);
 }
 
-/**/
-// static inline void SET_PAYLOAD_TAIL_FREE(uint64_t *payload_head, size_t size){
-//     uint64_t *payload_tail = GET_PAYLOAD_TAIL(payload_head, size);
-//     *payload_tail &= FREE_MASK;
-// }
-// static inline void SET_PAYLOAD_TAIL_ALLOC(uint64_t *payload_head, size_t size){
-//     uint64_t *payload_tail = GET_PAYLOAD_TAIL(payload_head, size);
-//     *payload_tail |= ALLOC_MASK;
-// }
-
 /*store the required information into a block's tail*/
-static inline void PACK_PAYLOAD_TAIL(uint64_t *payload_head, int alloc, int thread_id, size_t size){
-    uint64_t *payload_tail = GET_PAYLOAD_TAIL(payload_head, size);
+static inline void PACK_PAYLOAD_TAIL(uint64_t *payload_tail, int alloc, int thread_id, uint64_t *payload_head){
+    // uint64_t *payload_tail = GET_PAYLOAD_TAIL(payload_head, size);
     *payload_tail = (uint64_t)alloc | ((uint64_t)thread_id << 48) | (uint64_t)payload_head;
 }
 
@@ -51,7 +41,8 @@ static inline void PACK_PAYLOAD_HEAD(uint64_t *payload_head, int alloc, uint16_t
 /*store the necessary information into both the block's header and tail*/
 static inline void PACK_PAYLOAD(uint64_t *payload_head, uint16_t thread_id, int alloc, size_t size){
     PACK_PAYLOAD_HEAD(payload_head, alloc, thread_id, size);
-    PACK_PAYLOAD_TAIL(payload_head, alloc, thread_id, size);
+    uint64_t *payload_tail = GET_PAYLOAD_TAIL(payload_head, size);
+    PACK_PAYLOAD_TAIL(payload_tail, alloc, thread_id, payload_head);
 }
 
 /*returns whether a block is allocated or free*/
