@@ -7,13 +7,9 @@
 be released when possible. Required to be 2^n.*/
 #define PAYLOAD_CHUNK_SIZE (64*1024*1024)
 
-/*The size of each metadata chunk in bytes. Each thread will at least hold one.*/
+/*The size of each metadata chunk in bytes. This is used to hold thread_Info and
+local tables. Required to be 2^n and greater than a single ThreadInfo (1056)*/
 #define META_CHUNK_SIZE (4*1024*1024)
-
-/*Align "size" to "alignment", alignment should be 2^n.*/
-inline size_t align(size_t size, size_t alignment){
-    return (((size)+(alignment-1)) & (~(alignment-1)));
-}
 
 /*Request "size" bytes of payload memory chunk. The returned chunk should 
 have a size with multiply of PAYLOAD_CHUNK_SIZE and be aligned with 16*/
@@ -23,9 +19,9 @@ void *payload_chunk_req(size_t size);
 void payload_chunk_rel(void *ptr, size_t size);
 
 /*Request a metadata chunk*/
-void *meta_chunk_req();
+void *meta_chunk_req(size_t size);
 
 /*Release a metadata chunk*/
-void *meta_chunk_rel(void *ptr);
+void *meta_chunk_rel(void *ptr, size_t size);
 
 #endif

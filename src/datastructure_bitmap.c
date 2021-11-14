@@ -3,144 +3,148 @@
 #include <stdbool.h>
 #include <stdio.h>
 
-#include "rm_threads.h"
+#include <threads.h>
 
 #include "datastructure_bitmap.h"
 #include "datastructure_payload.h"
 #include "mempool.h"
 
-#define TABLE_PER_META_CHUNK (META_CHUNK_SIZE/sizeof(Table))
+#define TABLE_PER_META_CHUNK (META_CHUNK_SIZE/sizeof(LocalTable))
 #define THREADINFO_PER_CHUNK (META_CHUNK_SIZE/sizeof(ThreadInfo))
 
-rm_lock_t threadInfo_pool_lock = RM_LOCK_INITIALIZER;
-// static bool threadInfo_pool_lock_init_flag = 0;
-rm_lock_t table_pool_lock = RM_LOCK_INITIALIZER;
-// static bool table_pool_lock_init_flag = 0;
-
-static Table *table_pool = NULL;
+static LocalTable *table_pool = NULL;
 static ThreadInfo *threadInfo_pool = NULL;
-static ThreadInfo *threadInfo_list_head = NULL;
-static ThreadInfo *threadInfo_list_tail = NULL;
-static uint16_t threadInfo_list_size = 0;
+static volatile uint16_t threadInfo_pool_usage = 0;
+static volatile uint8_t threadInfo_pool_init_flag = 0;
+static volatile uint16_t threadInfo_count = 0;
+
+volatile NonBlockingStackBlock inactive_threadInfo_stack;
+
+// to store blocks with size >= BIG_BLOCK_MIN, <= PAYLOAD_CHUNK_SIZE
+volatile NonBlockingStackBlock big_block_stack = {.block_16b=0};
+
+thread_local uint64_t *local_big_block = NULL;
 
 //the default values are for initialization in the first call in init functions
 static int table_meta_pool_usage = TABLE_PER_META_CHUNK;
-static int threadInfo_meta_pool_usage = THREADINFO_PER_CHUNK;
 
-static rm_once_t global_level_0_table_flag = RM_ONCE_INITIALIZER;
-static Table *global_level_0_table = NULL;
-static rm_lock_t global_lock = RM_LOCK_INITIALIZER;
-static uint64_t *giant_root = NULL;
+thread_local ThreadInfo *local_thread_info = NULL;
+thread_local LocalTable *local_table;
 
-tls ThreadInfo *local_thread_info = NULL;
-tls Table *local_level_0_table = NULL;
+extern thread_local void *payload_pool;
+extern thread_local size_t payload_pool_size;
 
-extern tls void *payload_pool;
-extern tls size_t payload_pool_size;
+thread_local uint16_t thread_id;
 
-tls uint16_t thread_id;
-
-// void print_table(Table *table){
-//     printf("\nindex = %lx\n", table->index);
-//     for(int i = 0; i < 8; i++){
-//         for(int j = 0; j < 8; j++){
-//             printf("%p\t", table->entries[8*i+j]);
-//         }
-//         printf("\n");
-//     }
-// }
-
-/*create a new table without any contents*/
-Table *create_new_table(){
-    #ifdef __NOISY_DEBUG
-    write(1, "create_new_table\n", sizeof("create_new_table"));
-    #endif
-    rm_lock(&table_pool_lock);
-    if(table_meta_pool_usage == TABLE_PER_META_CHUNK){
-        table_pool = meta_chunk_req();
-        table_meta_pool_usage = 0;
-    }
-    table_meta_pool_usage ++;
-    Table *result = table_pool;
-    table_pool ++;
-
-    result->index = 0;
-    // memset(local_level_0_table->entries, 0, sizeof(local_level_0_table->entries));
-    //meta info will always use fresh memory space, already zeroed
-    rm_unlock(&table_pool_lock);
-    return result;
-}
+#define THREADINFO_ARRAY_SIZE 4096
+ThreadInfo *threadInfo_array[THREADINFO_ARRAY_SIZE];
 
 /*go through the threadInfo_list to find an inactive one*/
 ThreadInfo *find_inactive_threadInfo(){
-    if(threadInfo_list_head==NULL){return NULL;}
-    ThreadInfo *walker = threadInfo_list_head;
-    while(walker!=NULL){
-        if(walker->active == false){
-            return walker;
-        }
-        walker = walker->next;
-    }
-    return walker;
+    // pop the current inactive threadinfo from the stack
+    return pop_nonblocking_stack(inactive_threadInfo_stack, get_threadInfo_next);
 }
 
-/*create a new threadInfo for this thread, with local_level_0_table initialized*/
+/*initialize the threadInfo_pool*/
+void *threadInfo_pool_init(){
+    uint8_t init_id = __atomic_fetch_add(&threadInfo_pool_init_flag, 1, __ATOMIC_RELAXED);
+    if(init_id == 0){
+        threadInfo_pool = meta_chunk_req(META_CHUNK_SIZE);
+        threadInfo_pool_usage = 0;
+    }else{
+        while(threadInfo_pool==NULL){
+            ;
+        }
+    }
+    threadInfo_pool_init_flag = 0;
+}
+
+/*create a new threadInfo for this thread*/
 ThreadInfo *create_new_threadInfo(){
     #ifdef __NOISY_DEBUG
     write(1, "create_new_threadInfo\n", sizeof("create_new_threadInfo"));
     #endif
-    if(threadInfo_meta_pool_usage == THREADINFO_PER_CHUNK){
-        // printf("requesting meta_chunk\n");
-        threadInfo_pool = meta_chunk_req();
-        threadInfo_meta_pool_usage = 0;
-    }
-    threadInfo_meta_pool_usage ++;
-    ThreadInfo *new_threadInfo = threadInfo_pool;
-    threadInfo_pool ++;
+    uint16_t id = __atomic_fetch_add(&threadInfo_count, 1, __ATOMIC_RELAXED);
 
-    new_threadInfo->active = true;
+    uint16_t offset;
+    ThreadInfo *threadInfo_pool_snapshot;
+        /*
+        #XXX:
+        The following operation is safe as long as threadInfo_pool is not updated between getting the snapshot and increasing
+        offset. This is extremly rare but possible. 
+        */    
+    do{
+        if(threadInfo_pool_usage == THREADINFO_PER_CHUNK){
+            threadInfo_pool = NULL;
+            threadInfo_pool_init();
+        }else{
+            while(threadInfo_pool_usage > THREADINFO_PER_CHUNK){
+                ;
+            }            
+        }
+        threadInfo_pool_snapshot = threadInfo_pool;
+        offset = __atomic_fetch_add(&threadInfo_pool_usage, 1, __ATOMIC_RELAXED);
+    }while(offset >= THREADINFO_PER_CHUNK);
+    
+    ThreadInfo *new_threadInfo = &threadInfo_pool_snapshot[offset];
+
     new_threadInfo->next = NULL;
-    new_threadInfo->thread_id = threadInfo_list_size;
-    new_threadInfo->level_0_table = create_new_table();
+    new_threadInfo->thread_id = id;
     new_threadInfo->payload_pool = NULL;
     new_threadInfo->payload_pool_size = 0;
-    rm_lock_init(&(new_threadInfo->thread_lock));
-    threadInfo_list_size++;
 
-    if(threadInfo_list_head == NULL){
-        threadInfo_list_head = new_threadInfo;
-    }
+    #ifdef __RACE_TEST
+    new_threadInfo->active = 0;
+    #endif
 
-    if(threadInfo_list_tail != NULL){
-        threadInfo_list_tail->next = new_threadInfo;
-    }
-    threadInfo_list_tail = new_threadInfo;
+    threadInfo_array[id] = new_threadInfo;
 
     return new_threadInfo;
 }
 
 pthread_key_t inactive_key;
+
+/*
+#FIXME:
+The execution order of destructors registered by pthread_key_create() is random, and will be executed before a free() call
+releasing the memory requested during pthread_setspecific(). The former is a potention trouble maker but the later is surely
+causing crashing when there are rapid thread creating and destroying. 
+*/
+
 /*to set the threadinfo as inactive so it can be reused*/
 void set_threadInfo_inactive(void *arg){
     #ifdef __NOISY_DEBUG
     write(1, "cleaning up\n", sizeof("cleaning up"));
     #endif
-    local_thread_info->active = false;
     local_thread_info->payload_pool = payload_pool;
     local_thread_info->payload_pool_size = payload_pool_size;
+
+    #ifdef __RACE_TEST
+    __sync_fetch_and_sub(&(local_thread_info->active), 1);
+    #endif
+
+    // push current threadinfo to the non-blocking stack
+    push_nonblocking_stack(local_thread_info, inactive_threadInfo_stack, set_threadInfo_next);
+
+    local_thread_info = NULL;
+
+    thread_id = THREADINFO_ARRAY_SIZE;
 }
 
-void global_level_0_table_init(){
-    global_level_0_table = create_new_table();
-}
+/*
+#XXX:
+The init function is registered as a constructor for the main thread. However, the order of constructors not providing
+a priority is random, thus it is possible that other constructors in the user application are executed brfore this.
+*/
 
-void thread_bitmap_init(){
+__attribute__ ((constructor)) void thread_bitmap_init(){
     #ifdef __NOISY_DEBUG
     write(1, "thread_bitmap_init\n", sizeof("thread_bitmap_init"));
     #endif
-    // pthread_cleanup_push(set_threadInfo_inactive, NULL);    // not a safe implementation, but no idea how to improve
-    rm_lock(&threadInfo_pool_lock);
-    rm_callonce(&global_level_0_table_flag, global_level_0_table_init);
+    if(threadInfo_pool == NULL){
+        threadInfo_pool_init();
+    }
+    
     ThreadInfo *inactive_threadInfo = find_inactive_threadInfo();
     #ifdef __NOISY_DEBUG
     write(1, "find_inactive_threadInfo returned\n", sizeof("find_inactive_threadInfo returned"));
@@ -148,159 +152,139 @@ void thread_bitmap_init(){
 
     if(inactive_threadInfo == NULL){
         inactive_threadInfo = create_new_threadInfo();
-    }else{
-        inactive_threadInfo->active = true;
     }
     local_thread_info = inactive_threadInfo;
-    local_level_0_table = inactive_threadInfo->level_0_table;
+    local_table = &(inactive_threadInfo->table);
     thread_id = inactive_threadInfo->thread_id;
     payload_pool = inactive_threadInfo->payload_pool;
     payload_pool_size = inactive_threadInfo->payload_pool_size;
-    
-    // if(inactive_threadInfo != NULL){
-    //     inactive_threadInfo->active = true;
-        
-    // }else{
-    //     local_thread_info = create_new_threadInfo();
-    //     // printf("threadInfo created\n");
-    //     local_level_0_table = create_new_table();
-    //     // printf("level 0 table created\n");
-    //     local_thread_info->level_0_table = local_level_0_table;
-    //     thread_id = local_thread_info->thread_id;
-    // }
-    rm_unlock(&threadInfo_pool_lock);
+
+    #ifdef __RACE_TEST
+    if(__sync_fetch_and_add(&(local_thread_info->active), 1) > 0){
+        #include <signal.h>
+        raise(SIGABRT);
+    }
+    #endif
+
     pthread_key_create(&inactive_key, set_threadInfo_inactive);
     pthread_setspecific(inactive_key, (void*)0x8353);
-    // write(1, "exit thread_bitmap_init\n", sizeof("exit thread_bitmap_init"));
-    // print_table(global_level_0_table);
-    // print_table(local_level_0_table);
+
     return;
-    // pthread_cleanup_pop(0);
 }
 
+/*remove a table's head, and properly deal with next and prev for all blocks involved*/
+static inline void remove_table_head(uint64_t *block, int slot){
+    uint64_t *new_list_head = GET_NEXT_BLOCK(block);
+    local_table->entries[slot] = new_list_head;
+    if(new_list_head==NULL){
+        local_table->index &= ~(1UL<<slot);
+    }else{
+        SET_PREV_BLOCK(new_list_head, NULL);
+    }
+}
+
+// look for a victim block in tables and local big block pool, requested size < (3/4)PAYLOAD_CHUNK_SIZE-16
+// the returned block is not zeroed
 uint64_t *find_bitmap_victim(size_t ori_size){
     #ifdef __NOISY_DEBUG
     write(1, "find_bitmap_victim\n", sizeof("find_bitmap_victim"));
     #endif
-    if(local_level_0_table==NULL){
-        thread_bitmap_init();
-        #ifdef __NOISY_DEBUG
-        write(1, "thread_bitmap_init returned\n", sizeof("thread_bitmap_init returned"));
-        #endif
-    }
-    size_t size = ori_size - 16;
-    int level_0_offset = (size>>10)&63;
-    int level_1_offset = (size>>4)&63;
-    uint64_t level_0_index_mask = ~((((uint64_t)1)<<level_0_offset)-1);
-    uint64_t level_1_index_mask = ~((((uint64_t)1)<<level_1_offset)-1);
-    // printf("level 1 index mask is %lx\n", level_1_index_mask);
+    uint64_t req_size = GET_ROUNDED(ori_size);
+    uint64_t mask = GET_MASK(req_size);
+    int slot = trailing0s(local_table->index & mask);
     uint64_t *result = NULL;
-    size_t result_size = 0;
-    // check global table
-    // printf("checking global table\n");
-    if(rm_trylock(&global_lock)==RM_LOCKED){
-        int level_0_slot = trailing0s((global_level_0_table->index)&level_0_index_mask);
-        if(level_0_slot < 64){
-            // printf("level_0_slot = %d\n", level_0_slot);
-            Table *level_1_table = global_level_0_table->entries[level_0_slot];
-            int level_1_slot = trailing0s((level_1_table->index)&level_1_index_mask);
-            if(level_1_slot < 64){
-                result = level_1_table->entries[level_1_slot];
-                result_size = (((uint64_t)level_0_slot<<6)+level_1_slot)<<4;
-                level_1_table->entries[level_1_slot] = GET_NEXT_BLOCK(result);
-                if(GET_NEXT_BLOCK(result)==NULL){
-                    level_1_table->index &= ~((uint64_t)1<<level_1_slot);
-                    if(level_1_table->index == 0){
-                        global_level_0_table->index &= ~((uint64_t)1<<level_0_slot);
-                    }
-                }
-            }
-        }
-        rm_unlock(&global_lock);
+    if(slot < 64){
+        result = local_table->entries[slot];
+        uint64_t result_size = GET_SLOT_SIZE(slot);
+        remove_table_head(result, slot);
+        PACK_PAYLOAD(result, thread_id, 1, req_size);
+        uint64_t *new_block = GET_PAYLOAD_TAIL(result, req_size) + 1;
+        uint64_t new_block_size = result_size - req_size;
+        add_bitmap_block(new_block, new_block_size);
     }
-    #ifdef __NOISY_DEBUG
-    write(1, "finished global table checking\n", sizeof("finished global table checking"));
-    #endif
-    // check local table
-    if(result == NULL){
-        // mtx_lock(&(local_thread_info->thread_lock));
-        rm_lock(&(local_thread_info->thread_lock));
-        int level_0_slot = trailing0s((local_level_0_table->index)&level_0_index_mask);
-        if(level_0_slot < 64){
-            Table *level_1_table = local_level_0_table->entries[level_0_slot];
-            int level_1_slot = trailing0s((level_1_table->index)&level_1_index_mask);
-            if(level_1_slot < 64){
-                result = level_1_table->entries[level_1_slot];
-                result_size = (((uint64_t)level_0_slot<<6)+level_1_slot)<<4;
-                level_1_table->entries[level_1_slot] = GET_NEXT_BLOCK(result);
-                if(GET_NEXT_BLOCK(result)==NULL){
-                    level_1_table->index &= ~((uint64_t)1<<level_1_slot);
-                    if(level_1_table->index == 0){
-                        local_level_0_table->index &= ~((uint64_t)1<<level_0_slot);
-                    }
-                }
-            }
-        }
-        // mtx_unlock(&(local_thread_info->thread_lock));
-        rm_unlock(&(local_thread_info->thread_lock));
-    }
-    #ifdef __NOISY_DEBUG
-    write(1, "finished local table checking\n", sizeof("finished local table checking"));
-    #endif
-    if(result != NULL){
-        // printf("result_size = %ld\n", result_size);
-        size_t size_diff = result_size - size;
-        // size_diff should be tested and replaced with a less aggressive(larger) number
-        if(size_diff > 16){
-            uint64_t *new_block = GET_PAYLOAD_TAIL(result, ori_size) + 1;
-            size_t new_block_size = size_diff - 16;
-            add_bitmap_block(new_block, new_block_size);
-        }
-    }
-    // printf("returned result\n");
-    // print_table(global_level_0_table);
     return result;
 }
 
+// add a block to the LocalTable indexed as table_level, requires the block to be packed in advance
+void add_block_LocalTable(uint64_t *block, uint64_t size){
+    int slot = GET_SLOT(size);
+    SET_PREV_BLOCK(block, NULL);
+    uint64_t *old_head = local_table->entries[slot];
+    SET_NEXT_BLOCK(block, old_head);
+    local_table->entries[slot] = block;
+    if(old_head == NULL){
+        local_table->index |= 1UL << slot;
+    }else{
+        SET_PREV_BLOCK(old_head, block);
+    }
+}
+
+// add a block according to its size, requires the block to be packed in advance, does not accept NULL
 void add_bitmap_block(uint64_t *block, size_t size){
     #ifdef __NOISY_DEBUG
     write(1, "add_bitmap_block\n", sizeof("add_bitmap_block"));
     #endif
-    if(block==NULL){
-        #ifdef __NOISY_DEBUG
-        write(1, "add_bitmap_block received null, returnning\n", sizeof("add_bitmap_block received null, returnning"));
-        #endif
-        return;
+    uint64_t remain_size = size;
+    uint64_t *new_block = block;
+    while(remain_size != 0){
+        uint64_t new_block_size = __blsi_u64(remain_size);
+        PACK_PAYLOAD(new_block, thread_id, 0, new_block_size);
+        add_block_LocalTable(new_block, new_block_size);
+        remain_size -= new_block_size;
+        new_block += new_block_size/8;
     }
-    if(local_level_0_table==NULL){
-        thread_bitmap_init();
-    }
-    size -= 16;
-    int level_0_offset = (size>>10)&63;
-    // printf("level_0_offset = %d\n", level_0_offset);
-    int level_1_offset = (size>>4)&63;
-    // printf("level_1_offset = %d\n", level_1_offset);
-    rm_lock_t *lock = &(local_thread_info->thread_lock);
-    Table *level_0_table = local_level_0_table;
-    if(rm_trylock(&global_lock)==RM_LOCKED){
-        lock = &global_lock;
-        level_0_table = global_level_0_table;
-    }else{
-        // mtx_lock(lock);
-        rm_lock(lock);
-    }
-    level_0_table->index |= (uint64_t)1<<level_0_offset;
-    if(level_0_table->entries[level_0_offset]==NULL){
-        level_0_table->entries[level_0_offset] = create_new_table();
-    }
-    Table *level_1_table = level_0_table->entries[level_0_offset];
-    // printf("level 1 table is %p\n", level_1_table);
-    level_1_table->index |= (uint64_t)1<<level_1_offset;
-    SET_NEXT_BLOCK(block, level_1_table->entries[level_1_offset]);
-    level_1_table->entries[level_1_offset] = block;
-    // mtx_unlock(lock);
-    rm_unlock(lock);
-    // print_table(global_level_0_table);
-    // print_table(global_level_0_table->entries[0]);
 }
 
+// remove a block from table structure
+static inline void remove_block(uint64_t *block, int slot){
+    uint64_t *prev = GET_PREV_BLOCK(block);
+    uint64_t *next = GET_NEXT_BLOCK(block);
+    if(prev != NULL){
+        SET_NEXT_BLOCK(prev, next);
+        if(next != NULL){
+            SET_PREV_BLOCK(next, prev);
+        }
+    }else{
+        // is a table head
+        remove_table_head(block, slot);
+    }
+}
+
+uint64_t *coalesce(uint64_t *payload){
+    uint64_t size = GET_CONTENT(payload);
+    uint64_t *front_tail = payload-1;
+    uint64_t *front_head = GET_PAYLOAD_HEAD(front_tail);
+    
+    uint64_t *block_to_add = payload;
+    uint64_t block_size = size;
+    uint64_t *estimated_front_head = front_tail - size/8 + 1;
+    uint64_t estimated_front_tail = ((uint64_t)thread_id<<48)|(uint64_t)estimated_front_head;
+    bool merge_front = estimated_front_tail == *front_tail;
+    if(merge_front){
+        uint64_t *front_head = estimated_front_head;
+        int front_slot = GET_SLOT(block_size);
+        remove_block(front_head, front_slot);
+        block_to_add = front_head;
+        block_size = block_size << 1;
+    }
+    uint64_t *behind_head = GET_PAYLOAD_TAIL(payload, size) + 1;
+    uint64_t estimated_behind_head = ((uint64_t)thread_id<<48)|block_size;
+    bool merge_behind = (*behind_head)==estimated_behind_head;
+    if(merge_behind){
+        int behind_slot = GET_SLOT(block_size);
+        remove_block(behind_head, behind_slot);
+        block_size = block_size << 1;
+    }
+    if(merge_front || merge_behind){
+        // complete packing done in free()
+        *block_to_add = block_size;
+    }
+    return block_to_add;
+}
+
+// attach a block to the debt stack in the owner's threadinfo
+void remote_free(uint64_t *remote_block, int block_id){
+    ThreadInfo *target_threadInfo = threadInfo_array[block_id];
+    push_nonblocking_stack(remote_block, target_threadInfo->debt_stack, SET_NEXT_BLOCK);
+    __atomic_fetch_add(&(target_threadInfo->debt_stack_size), 1, __ATOMIC_RELAXED);
+}
