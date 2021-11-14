@@ -28,12 +28,20 @@ void payload_init(size_t payload_size){
 }
 
 /*cut the rounded size from payload_pool, if the size exceed payload pool size, request a new payload pool
-from the mempool and repeat, the remain size will be added to the table*/
+from the mempool and repeat, the remain size will be added to the table. The request size can not exceed 
+PAYLOAD_CHUNK_SIZE*/
 void *create_payload_block(size_t size){
     #ifdef __NOISY_DEBUG
     write(1, "into create_payload_block\n", sizeof("into create_payload_block"));
     #endif
     size_t payload_size = GET_ROUNDED(size);
+    if(payload_size >= PAYLOAD_CHUNK_SIZE){
+        // huge block is given
+        // 16 bytes are for alignment requirement, no need to align again since rounded size
+        uint64_t *chunk_head = payload_chunk_req(payload_size);
+        PACK_PAYLOAD_HEAD(chunk_head + 1, 1, ID_MASK, payload_size);
+        return chunk_head + 2;
+    }    
     if(payload_pool_size<payload_size){
         add_bitmap_block(payload_pool, payload_pool_size);
         payload_init(payload_size);
