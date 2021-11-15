@@ -7,10 +7,12 @@
 
 #define FREE_MASK       0xfffffffffffffffeUL
 #define ALLOC_MASK      (~FREE_MASK)
+
+// a mask for getting the size/pointer from header/tail
 #define CONT_MASK       0x0000fffffffffffeUL
 
+// a mask for getting the id, also marks the impossible thread_id
 #define ID_MASK         0x000000000000ffffUL
-#define MAX_THREAD_NUM  0x8000
 
 /*returns the block's size*/
 static inline uint64_t GET_CONTENT(uint64_t *payload){

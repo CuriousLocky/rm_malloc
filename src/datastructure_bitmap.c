@@ -104,13 +104,6 @@ ThreadInfo *create_new_threadInfo(){
 
 pthread_key_t inactive_key;
 
-/*
-#FIXME:
-The execution order of destructors registered by pthread_key_create() is random, and will be executed before a free() call
-releasing the memory requested during pthread_setspecific(). The former is a potention trouble maker but the later is surely
-causing crashing when there are rapid thread creating and destroying. 
-*/
-
 /*to set the threadinfo as inactive so it can be reused*/
 void set_threadInfo_inactive(void *arg){
     #ifdef __NOISY_DEBUG
@@ -250,6 +243,7 @@ static inline void remove_block(uint64_t *block, int slot){
     }
 }
 
+// try to merge the block in the front and back, returns the merge result to add into the table
 uint64_t *coalesce(uint64_t *payload){
     uint64_t size = GET_CONTENT(payload);
     uint64_t *front_tail = payload-1;
@@ -257,6 +251,8 @@ uint64_t *coalesce(uint64_t *payload){
     uint64_t *block_to_add = payload;
     uint64_t block_size = size;
     
+    // test shows check merging behind first saves 1/3 memory usage, potentially related to the way
+    // blocks are splitted
     uint64_t *behind_head = GET_PAYLOAD_TAIL(payload, size) + 1;
     uint64_t estimated_behind_head = ((uint64_t)thread_id<<48)|block_size;
     bool merge_behind = (*behind_head)==estimated_behind_head;

@@ -13,7 +13,7 @@ static inline int trailing0s(uint64_t x);
 static inline int leading0s(uint64_t x);
 
 /*Align "size" to "alignment", alignment should be 2^n.*/
-inline size_t align(size_t size, size_t alignment){
+static inline size_t align(size_t size, size_t alignment){
     return (((size)+(alignment-1)) & (~(alignment-1)));
 }
 
@@ -26,13 +26,19 @@ typedef union{
     }block_struct;
 }NonBlockingStackBlock;
 
-/*each bit of index is for indicating whether entries[i]==NULL*/
+/* a table holding linked lists containing free blocks according to their size. */
 typedef union{
+    // each bit of index is for indicating whether entries[i]==NULL
     uint64_t index;
     // entries[0~4] is never used
     uint64_t *entries[48];
 } LocalTable;
 
+/*The size of LocalTable is determined as the 48 used bit in pointers of 64-bit system. But as 
+it only holds blocks smaller than PAYLOAD_CHUNK_SIZE, the used size is only trailing0s(PAYLOAD_CHUNK_SIZE).
+However, test shows great harm to performace if it shrinks shorter than 31.*/
+
+// a struct holding necessary information for a thread
 typedef struct ThreadInfo{
     #ifdef __RACE_TEST
     int active;
@@ -46,21 +52,32 @@ typedef struct ThreadInfo{
     uint64_t debt_stack_size;
 } ThreadInfo;
 
+// get a block's next in linked list
 static inline uint64_t *GET_NEXT_BLOCK(uint64_t *block){
     return (uint64_t*)(*(block+1));
 }
+
+// set a block as next of the other in linked list
 static inline void SET_NEXT_BLOCK(uint64_t *block, uint64_t *next){
     *(block+1) = (uint64_t)next;
 }
+
+// get a block's prev in linked list
 static inline uint64_t *GET_PREV_BLOCK(uint64_t *block){
     return (uint64_t*)(*(block+2));
 }
+
+// set a block as prev of the other in linked list
 static inline void SET_PREV_BLOCK(uint64_t *block, uint64_t *prev){
     *(block+2) = (uint64_t)prev;
 }
+
+// get the slot number in the table for a block with specified size
 static inline int GET_SLOT(uint64_t size){
     return trailing0s(size);
 }
+
+// get the block size for a specified slot
 static inline uint64_t GET_SLOT_SIZE(int slot){
     return 1UL << slot;
 }
