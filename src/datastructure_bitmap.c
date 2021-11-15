@@ -256,6 +256,16 @@ uint64_t *coalesce(uint64_t *payload){
     
     uint64_t *block_to_add = payload;
     uint64_t block_size = size;
+    
+    uint64_t *behind_head = GET_PAYLOAD_TAIL(payload, size) + 1;
+    uint64_t estimated_behind_head = ((uint64_t)thread_id<<48)|block_size;
+    bool merge_behind = (*behind_head)==estimated_behind_head;
+    if(merge_behind){
+        int behind_slot = GET_SLOT(block_size);
+        remove_block(behind_head, behind_slot);
+        block_size = block_size << 1;
+    }
+
     uint64_t *estimated_front_head = front_tail - block_size/8 + 1;
     uint64_t estimated_front_tail = ((uint64_t)thread_id<<48)|(uint64_t)estimated_front_head;
     bool merge_front = estimated_front_tail == *front_tail;
@@ -266,14 +276,7 @@ uint64_t *coalesce(uint64_t *payload){
         block_to_add = front_head;
         block_size = block_size << 1;
     }
-    uint64_t *behind_head = GET_PAYLOAD_TAIL(payload, size) + 1;
-    uint64_t estimated_behind_head = ((uint64_t)thread_id<<48)|block_size;
-    bool merge_behind = (*behind_head)==estimated_behind_head;
-    if(merge_behind){
-        int behind_slot = GET_SLOT(block_size);
-        remove_block(behind_head, behind_slot);
-        block_size = block_size << 1;
-    }
+
     if(merge_front || merge_behind){
         // complete packing done in free()
         *block_to_add = block_size;
