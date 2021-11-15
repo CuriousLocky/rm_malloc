@@ -253,7 +253,6 @@ static inline void remove_block(uint64_t *block, int slot){
 uint64_t *coalesce(uint64_t *payload){
     uint64_t size = GET_CONTENT(payload);
     uint64_t *front_tail = payload-1;
-    uint64_t *front_head = GET_PAYLOAD_HEAD(front_tail);
     
     uint64_t *block_to_add = payload;
     uint64_t block_size = size;
