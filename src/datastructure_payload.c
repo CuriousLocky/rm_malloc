@@ -21,8 +21,13 @@ void payload_init(size_t payload_size){
     uint64_t *new_payload_pool = (uint64_t*)payload_chunk_req(payload_size);
     uint64_t *chunk_tail = new_payload_pool + new_pool_size/8 - 1;
     PACK_PAYLOAD_HEAD(chunk_tail, 1, ID_MASK, 0);
+    #ifdef SANITY_TEST
+    uint64_t *dummy_head = new_payload_pool + 1;
+    PACK_PAYLOAD(dummy_head, ID_MASK, 1, 16);
+    #else
     uint64_t *dummy_tail = new_payload_pool + 2;
     PACK_PAYLOAD_TAIL(dummy_tail, 1, ID_MASK, NULL);
+    #endif
     payload_pool = new_payload_pool + 3;
     payload_pool_size = new_pool_size - 32;
 }

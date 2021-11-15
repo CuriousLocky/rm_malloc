@@ -256,7 +256,7 @@ uint64_t *coalesce(uint64_t *payload){
     
     uint64_t *block_to_add = payload;
     uint64_t block_size = size;
-    uint64_t *estimated_front_head = front_tail - size/8 + 1;
+    uint64_t *estimated_front_head = front_tail - block_size/8 + 1;
     uint64_t estimated_front_tail = ((uint64_t)thread_id<<48)|(uint64_t)estimated_front_head;
     bool merge_front = estimated_front_tail == *front_tail;
     if(merge_front){
