@@ -70,10 +70,10 @@ static inline uint64_t GET_MASK(uint64_t size){
     return ~(size-1);
 }
 
-// return a rounded size for allocation 
+// return a rounded size for allocation to nearest 2^n
 static inline uint64_t GET_ROUNDED(uint64_t size){
-    uint64_t round_step = (~(INT64_MIN>>leading0s(size)))+1;
-    return align(size, round_step);
+    uint64_t round_step = ((uint64_t)INT64_MIN)>>leading0s(size);
+    return round_step << (round_step!=size);
 }
 
 /*returns the number of trailing zeros of an uint64_t*/
