@@ -103,7 +103,7 @@ void rm_free(void *ptr){
             uint64_t size = GET_CONTENT(payload);
             payload_chunk_rel(payload-1, size);
             return;
-        }        
+        }
         remote_free(payload, block_id);
         return;
     }
@@ -114,9 +114,6 @@ void rm_free(void *ptr){
         check_front_behind_sanity(payload);
     #endif
     uint64_t *block_to_add = coalesce(payload);
-    if(block_to_add == NULL){
-        return;
-    }
     size_t size = GET_CONTENT(block_to_add);
     PACK_PAYLOAD(block_to_add, thread_id, 0, size);
     add_block_LocalTable(block_to_add, size);
@@ -126,9 +123,6 @@ void rm_free(void *ptr){
     for(int i = 0; i < current_debt_stack_size; i++){
         uint64_t *debt_block = pop_nonblocking_stack(local_thread_info->debt_stack, GET_NEXT_BLOCK);
         uint64_t *block_to_add = coalesce(debt_block);
-        if(block_to_add == NULL){
-            return;
-        }
         size_t size = GET_CONTENT(block_to_add);
         PACK_PAYLOAD(block_to_add, thread_id, 0, size);
         add_block_LocalTable(block_to_add, size);
