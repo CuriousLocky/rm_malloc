@@ -9,7 +9,6 @@
 #include "datastructure_payload.h"
 #include "mempool.h"
 
-#define TABLE_PER_META_CHUNK (META_CHUNK_SIZE/sizeof(LocalTable))
 #define THREADINFO_PER_CHUNK (META_CHUNK_SIZE/sizeof(ThreadInfo))
 
 static LocalTable *table_pool = NULL;
@@ -22,11 +21,6 @@ volatile NonBlockingStackBlock inactive_threadInfo_stack;
 
 // to store blocks with size >= BIG_BLOCK_MIN, <= PAYLOAD_CHUNK_SIZE
 volatile NonBlockingStackBlock big_block_stack = {.block_16b=0};
-
-thread_local uint64_t *local_big_block = NULL;
-
-//the default values are for initialization in the first call in init functions
-static int table_meta_pool_usage = TABLE_PER_META_CHUNK;
 
 thread_local ThreadInfo *local_thread_info = NULL;
 thread_local LocalTable *local_table;
