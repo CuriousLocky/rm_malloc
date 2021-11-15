@@ -9,7 +9,7 @@ bin/gen_big_trace: src/gen_big_trace.c
 bin/linscal: src/linscal.c
 	@$(CXX) $(CFLAGS) -o $@ $<
 
-bin/shbench: src/shbench.c
+bin/largeTest: src/largeTest.c
 	@$(CXX) $(CFLAGS) -o $@ $<
 
 bin/threadTest: src/threadTest.c

@@ -13,8 +13,6 @@
 #define _GNU_SOURCE
 #include <getopt.h>
 
-#define PSEUDOSEED 92320736
-
 bool recordFlag = false;
 char recordFile[128] = "memory_record.csv";
 int minSize = 10;
