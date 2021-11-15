@@ -55,9 +55,6 @@ void *threadInfo_pool_init(){
 
 /*create a new threadInfo for this thread*/
 ThreadInfo *create_new_threadInfo(){
-    #ifdef __NOISY_DEBUG
-    write(1, "create_new_threadInfo\n", sizeof("create_new_threadInfo"));
-    #endif
     uint16_t id = __atomic_fetch_add(&threadInfo_count, 1, __ATOMIC_RELAXED);
 
     uint16_t offset;
@@ -100,9 +97,6 @@ pthread_key_t inactive_key;
 
 /*to set the threadinfo as inactive so it can be reused*/
 void set_threadInfo_inactive(void *arg){
-    #ifdef __NOISY_DEBUG
-    write(1, "cleaning up\n", sizeof("cleaning up"));
-    #endif
     local_thread_info->payload_pool = payload_pool;
     local_thread_info->payload_pool_size = payload_pool_size;
 
@@ -125,17 +119,11 @@ a priority is random, thus it is possible that other constructors in the user ap
 */
 
 __attribute__ ((constructor)) void thread_bitmap_init(){
-    #ifdef __NOISY_DEBUG
-    write(1, "thread_bitmap_init\n", sizeof("thread_bitmap_init"));
-    #endif
     if(threadInfo_pool == NULL){
         threadInfo_pool_init();
     }
     
     ThreadInfo *inactive_threadInfo = find_inactive_threadInfo();
-    #ifdef __NOISY_DEBUG
-    write(1, "find_inactive_threadInfo returned\n", sizeof("find_inactive_threadInfo returned"));
-    #endif
 
     if(inactive_threadInfo == NULL){
         inactive_threadInfo = create_new_threadInfo();
@@ -173,9 +161,6 @@ static inline void remove_table_head(uint64_t *block, int slot){
 // look for a victim block in tables and local big block pool, requested size < (3/4)PAYLOAD_CHUNK_SIZE-16
 // the returned block is not zeroed
 uint64_t *find_bitmap_victim(size_t ori_size){
-    #ifdef __NOISY_DEBUG
-    write(1, "find_bitmap_victim\n", sizeof("find_bitmap_victim"));
-    #endif
     uint64_t req_size = GET_ROUNDED(ori_size);
     uint64_t mask = GET_MASK(req_size);
     int slot = trailing0s(local_table->index & mask);
@@ -208,9 +193,6 @@ void add_block_LocalTable(uint64_t *block, uint64_t size){
 
 // add a block according to its size, requires the block to be packed in advance, does not accept NULL
 void add_bitmap_block(uint64_t *block, size_t size){
-    #ifdef __NOISY_DEBUG
-    write(1, "add_bitmap_block\n", sizeof("add_bitmap_block"));
-    #endif
     uint64_t remain_size = size;
     uint64_t *new_block = block;
     while(remain_size != 0){
