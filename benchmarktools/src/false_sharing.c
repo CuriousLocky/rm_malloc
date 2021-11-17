@@ -103,5 +103,5 @@ int main(int argc, char** argv){
     struct timeval now;
     gettimeofday(&now, NULL);
 	double time = (now.tv_sec - start.tv_sec) + ((double)now.tv_usec-start.tv_usec)/1000000;
-    printf("time consumption =\t%.3f\n", time);
+    printf("running time =\t%.3f\n", time);
 }
