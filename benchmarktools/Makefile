@@ -1,7 +1,7 @@
 CXX = gcc
 CFLAGS = -pthread -fPIC -Og
 
-BIN= gen_big_trace,linscal,shbench,threadTest,run_single,larson,auto_test
+BIN= gen_big_trace,linscal,shbench,threadTest,run_single,larson,auto_test,false_sharing
 
 bin/gen_big_trace: src/gen_big_trace.c
 	@$(CXX) $(CFLAGS) -o $@ $<
@@ -26,6 +26,9 @@ bin/larson_rm: src/larson_rm.c
 
 bin/auto_test: src/auto_test.c
 	@$(CXX) $(CFLAGS) -o $@ $< -ldl
+
+bin/false_sharing: src/false_sharing.c
+	@$(CXX) $(CFLAGS) -o $@ $<
 
 dir:
 	mkdir bin
