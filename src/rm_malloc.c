@@ -36,8 +36,8 @@ void check_valid_tail(uint64_t *tail){
     if(GET_ID(tail)!=thread_id){
         return;
     }
-    uint64_t *head = GET_PAYLOAD_HEAD(tail);
-    uint64_t *real_tail = GET_PAYLOAD_TAIL(head, GET_CONTENT(head));
+    uint64_t *head = GET_BLOCK_HEAD(tail);
+    uint64_t *real_tail = GET_BLOCK_TAIL(head, GET_CONTENT(head));
     if(tail != real_tail){
         raise(SIGABRT);
     }
@@ -46,8 +46,8 @@ void check_valid_tail(uint64_t *tail){
 __attribute__((optimize(0)))
 void check_front_behind_sanity(uint64_t *block){
     uint64_t *front_tail = block - 1;
-    uint64_t *front_head = GET_PAYLOAD_HEAD(front_tail);
-    uint64_t *behind_head = GET_PAYLOAD_TAIL(block, GET_CONTENT(block)) + 1;
+    uint64_t *front_head = GET_BLOCK_HEAD(front_tail);
+    uint64_t *behind_head = GET_BLOCK_TAIL(block, GET_CONTENT(block)) + 1;
     check_valid_header(front_head);
     check_valid_header(behind_head);
     check_valid_tail(front_tail);
@@ -56,7 +56,7 @@ void check_front_behind_sanity(uint64_t *block){
 
 static inline MallocResult __rm_malloc(size_t ori_size){
     MallocResult result;
-    size_t size = align(ori_size + 16, 32);
+    size_t size = align(ori_size + 32, 64);
     uint64_t *victim_block = find_bitmap_victim(size);
     if(victim_block == NULL){
         result.prezeroed_flag = 1;
@@ -68,7 +68,7 @@ static inline MallocResult __rm_malloc(size_t ori_size){
     #ifdef SANITY_TEST
         check_front_behind_sanity(result.ptr);
     #endif
-    result.ptr ++;
+    result.ptr = GET_PAYLOAD(result.ptr);
     return result;
 }
 
@@ -89,7 +89,7 @@ void rm_free(void *ptr){
         perror("not aligned\n");
         exit(-1);
     }
-    uint64_t *payload = ((uint64_t*)ptr) - 1;
+    uint64_t *payload = ((uint64_t*)ptr) - 2;
     if(!IS_ALLOC(payload)){
         problem_ptr = payload;
         perror("double free\n");

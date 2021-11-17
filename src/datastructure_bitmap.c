@@ -170,7 +170,7 @@ uint64_t *find_bitmap_victim(size_t ori_size){
         uint64_t result_size = GET_SLOT_SIZE(slot);
         remove_table_head(result, slot);
         PACK_PAYLOAD(result, thread_id, 1, req_size);
-        uint64_t *new_block = GET_PAYLOAD_TAIL(result, req_size) + 1;
+        uint64_t *new_block = GET_BLOCK_TAIL(result, req_size) + 1;
         uint64_t new_block_size = result_size - req_size;
         add_bitmap_block(new_block, new_block_size);
     }
@@ -229,7 +229,7 @@ uint64_t *coalesce(uint64_t *payload){
     
     // test shows check merging behind first saves 1/3 memory usage, potentially related to the way
     // blocks are splitted
-    uint64_t *behind_head = GET_PAYLOAD_TAIL(payload, size) + 1;
+    uint64_t *behind_head = GET_BLOCK_TAIL(payload, size) + 1;
     uint64_t estimated_behind_head = ((uint64_t)thread_id<<48)|block_size;
     bool merge_behind = (*behind_head)==estimated_behind_head;
     if(merge_behind){

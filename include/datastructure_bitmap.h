@@ -54,22 +54,22 @@ typedef struct ThreadInfo{
 
 // get a block's next in linked list
 static inline uint64_t *GET_NEXT_BLOCK(uint64_t *block){
-    return (uint64_t*)(*(block+1));
+    return (uint64_t*)(*(block+2));
 }
 
 // set a block as next of the other in linked list
 static inline void SET_NEXT_BLOCK(uint64_t *block, uint64_t *next){
-    *(block+1) = (uint64_t)next;
+    *(block+2) = (uint64_t)next;
 }
 
 // get a block's prev in linked list
 static inline uint64_t *GET_PREV_BLOCK(uint64_t *block){
-    return (uint64_t*)(*(block+2));
+    return (uint64_t*)(*(block+3));
 }
 
 // set a block as prev of the other in linked list
 static inline void SET_PREV_BLOCK(uint64_t *block, uint64_t *prev){
-    *(block+2) = (uint64_t)prev;
+    *(block+3) = (uint64_t)prev;
 }
 
 // get the slot number in the table for a block with specified size
