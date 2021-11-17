@@ -13,7 +13,7 @@
 #define _GNU_SOURCE
 #include <getopt.h>
 
-int arraySize = 200000;
+int arraySize = 20000;
 int turnNum = 10;
 int threadNum = 1;
 int writeNum = 20000;

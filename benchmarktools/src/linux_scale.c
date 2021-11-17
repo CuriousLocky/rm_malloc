@@ -16,7 +16,8 @@
 int test_traces_size = 0;
 int test_all_flag = 0;
 int test_thread = 1;
-int test_turn = 100;
+int test_turn = 1000;
+int request_size = 64;
 
 bool verbose = false;
 
@@ -30,7 +31,7 @@ bool term = false;
 
 enum args{
     ARG_THREADNUM, ARG_LIB, ARG_TURN, ARG_RECORD, ARG_RECORDFILE, 
-    ARG_VERBOSE
+    ARG_VERBOSE, ARG_SEED
 };
 
 struct option opts[] = {
@@ -39,6 +40,7 @@ struct option opts[] = {
     {"record",      no_argument,        NULL,   ARG_RECORD},
     {"out",         required_argument,  NULL,   ARG_RECORDFILE},
     {"verbose",     no_argument,        NULL,   ARG_VERBOSE},
+    {"size",        required_argument,  NULL,   ARG_SEED},
     {NULL,          0,                  NULL,   0}
 };
 
@@ -61,12 +63,16 @@ void parse_arg(int argc, char **argv){
             case ARG_VERBOSE:{
                 verbose = true;
             }break;
+            case ARG_SEED:{
+                request_size = atoi(optarg);
+            }break;
             default:
                 printf("unsupported flag\n");
                 exit(0);
         }
     }
     printf("turn =\t%d\n", test_turn);
+    printf("size =\t%d\n", request_size);
     printf("thread =\t%d\n", test_thread);
 }
 
@@ -76,20 +82,11 @@ void *run_thread(void *arg){
         printf("thread %d created\n", thread_id);
     }
     for(int i = 0; i < test_turn; i++){
-        int blockCounter = 0;
-        int size;        
-        for(long j = 0; j < STD_TURN; j++){
-            if(blockCounter = 100){
-                size = 64*1024;
-                blockCounter = 0;
-            }else{
-                size = 64;
-                blockCounter ++;
-            }
-            int *pointer = malloc(size);
-            memset(pointer, 0xc, size);
+        for(int j = 0; j < STD_TURN; j++){
+            int *pointer = malloc(request_size);
+            memset(pointer, 0xc, request_size);
             free(pointer);
-        }        
+        }
     }
     if(verbose){
         printf("thread %d completed\n", thread_id);

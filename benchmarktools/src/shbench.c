@@ -13,10 +13,10 @@
 #define MAXLINE 1024
 #define STD_TURN 100000
 
-int test_traces_size = 0;
 int test_all_flag = 0;
 int test_thread = 1;
-int test_turn = 100;
+int test_turn = 1000;
+int seed = 835322;
 
 bool verbose = false;
 
@@ -30,7 +30,7 @@ bool term = false;
 
 enum args{
     ARG_THREADNUM, ARG_LIB, ARG_TURN, ARG_RECORD, ARG_RECORDFILE, 
-    ARG_VERBOSE
+    ARG_VERBOSE, ARG_SEED
 };
 
 struct option opts[] = {
@@ -39,6 +39,7 @@ struct option opts[] = {
     {"record",      no_argument,        NULL,   ARG_RECORD},
     {"out",         required_argument,  NULL,   ARG_RECORDFILE},
     {"verbose",     no_argument,        NULL,   ARG_VERBOSE},
+    {"seed",        required_argument,  NULL,   ARG_SEED},
     {NULL,          0,                  NULL,   0}
 };
 
@@ -61,13 +62,24 @@ void parse_arg(int argc, char **argv){
             case ARG_VERBOSE:{
                 verbose = true;
             }break;
+            case ARG_SEED:{
+                seed = atoi(optarg);
+            }break;
             default:
                 printf("unsupported flag\n");
                 exit(0);
         }
     }
     printf("turn =\t%d\n", test_turn);
+    printf("seed =\t%d\n", seed);
     printf("thread =\t%d\n", test_thread);
+}
+
+uint gen_pseudo_rand(uint input){
+    input ^= input<<13;
+    input ^= input>>17;
+    input ^= input<<5;
+    return input;
 }
 
 void *run_thread(void *arg){
@@ -75,21 +87,19 @@ void *run_thread(void *arg){
     if(verbose){
         printf("thread %d created\n", thread_id);
     }
+    int randNum = seed;
     for(int i = 0; i < test_turn; i++){
-        int blockCounter = 0;
-        int size;        
-        for(long j = 0; j < STD_TURN; j++){
-            if(blockCounter = 100){
-                size = 64*1024;
-                blockCounter = 0;
-            }else{
-                size = 64;
-                blockCounter ++;
-            }
-            int *pointer = malloc(size);
-            memset(pointer, 0xc, size);
-            free(pointer);
-        }        
+        int **array = malloc(STD_TURN * sizeof(int*));
+        for(int j = 0; j < STD_TURN; j++){
+            randNum = gen_pseudo_rand(randNum);
+            size_t allocSize = 1 + (randNum & 1023);
+            array[j] = malloc(allocSize);
+            memset(array[j], 0xc, allocSize);   
+        }
+        for(int j = 0; j < STD_TURN; j++){
+            free(array[j]);
+        }
+        free(array);
     }
     if(verbose){
         printf("thread %d completed\n", thread_id);

@@ -16,8 +16,8 @@
 int test_traces_size = 0;
 int test_all_flag = 0;
 int test_thread = 1;
-int test_turn = 1;
-int request_size = 8;
+int test_turn = 1000;
+int request_size = 64;
 
 bool verbose = false;
 
@@ -27,13 +27,11 @@ char testFile[128];
 
 bool test_all = true;
 
-bool timeFlag = false;
-
 bool term = false;
 
 enum args{
     ARG_THREADNUM, ARG_LIB, ARG_TURN, ARG_RECORD, ARG_RECORDFILE, 
-    ARG_VERBOSE, ARG_TIME, ARG_SIZE
+    ARG_VERBOSE, ARG_SEED
 };
 
 struct option opts[] = {
@@ -42,8 +40,7 @@ struct option opts[] = {
     {"record",      no_argument,        NULL,   ARG_RECORD},
     {"out",         required_argument,  NULL,   ARG_RECORDFILE},
     {"verbose",     no_argument,        NULL,   ARG_VERBOSE},
-    {"time",        no_argument,        NULL,   ARG_TIME},
-    {"size",        required_argument,  NULL,   ARG_SIZE},
+    {"size",        required_argument,  NULL,   ARG_SEED},
     {NULL,          0,                  NULL,   0}
 };
 
@@ -66,10 +63,7 @@ void parse_arg(int argc, char **argv){
             case ARG_VERBOSE:{
                 verbose = true;
             }break;
-            case ARG_TIME:{
-                timeFlag = true;
-            }break;
-            case ARG_SIZE:{
+            case ARG_SEED:{
                 request_size = atoi(optarg);
             }break;
             default:
@@ -87,12 +81,17 @@ void *run_thread(void *arg){
     if(verbose){
         printf("thread %d created\n", thread_id);
     }
+    
     for(int i = 0; i < test_turn; i++){
+        int **array = malloc(STD_TURN * sizeof(int*));
         for(int j = 0; j < STD_TURN; j++){
-            int *pointer = malloc(request_size);
-            memset(pointer, 0xc, request_size);
-            free(pointer);
+            array[j] = malloc(request_size);
+            memset(array[j], 0xc, request_size);   
         }
+        for(int j = 0; j < STD_TURN; j++){
+            free(array[j]);
+        }
+        free(array);
     }
     if(verbose){
         printf("thread %d completed\n", thread_id);
@@ -137,10 +136,8 @@ int main(int argc, char **argv){
         pthread_create(&recorder, NULL, record_mem, recordFile);
     }
     struct timeval start;
-    if(timeFlag){
-        printf("timing started\n");
-        gettimeofday(&start, NULL);
-    }
+    printf("timing started\n");
+    gettimeofday(&start, NULL);
     pthread_t thread_pool[test_thread];
 
     for(int i = 0; i < test_thread; i++){
@@ -151,12 +148,10 @@ int main(int argc, char **argv){
     for(int i = 0; i < test_thread; i++){
         pthread_join(thread_pool[i], NULL);
     }
-    if(timeFlag){
-        struct timeval end;
-        gettimeofday(&end, NULL);
-        double time = (end.tv_sec - start.tv_sec) + ((double)end.tv_usec-start.tv_usec)/1000000;
-        printf("running time =\t%.3f\n", time);
-    }
+    struct timeval end;
+    gettimeofday(&end, NULL);
+    double time = (end.tv_sec - start.tv_sec) + ((double)end.tv_usec-start.tv_usec)/1000000;
+    printf("running time =\t%.3f\n", time);
     if(recordFlag){
         term = true;
         pthread_join(recorder, NULL);
